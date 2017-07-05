@@ -42,6 +42,3 @@ while rxMsg < 1:
     time.sleep(1)
 
 session.disconnect()
-
-del session
-del context

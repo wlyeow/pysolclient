@@ -28,8 +28,6 @@ msg.setBinaryAttachment('Hello World!\n'.encode())
 session.sendMsg(msg)
 print('Message sent.')
 
-session.disconnect()
-
 del msg
-del session
-del context
+
+session.disconnect()
