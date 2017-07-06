@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import solclient
+import pysolclient as solclient
 import sys
 
 if len(sys.argv) < 5:
@@ -22,7 +22,7 @@ session = solclient.Session(context, sprops)
 session.connect()
 
 msg = solclient.Message()
-msg.setDestination(solclient.Destination(sys.argv[4]))
+msg.setDest(solclient.Destination(sys.argv[4]))
 msg.setBinaryAttachment('Hello World!\n'.encode())
 
 session.sendMsg(msg)

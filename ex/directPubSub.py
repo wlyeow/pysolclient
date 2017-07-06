@@ -36,17 +36,22 @@ print('Subscribe to {}.'.format(conf.topic))
 session.topicSubscribe(conf.topic)
 
 msg = solclient.Message()
-msg.setDestination(solclient.Destination(conf.topic))
-msg.setBinaryAttachment('Hello World!\n'.encode())
+err = msg.applyProps( \
+        Dest=solclient.Destination(conf.topic),
+        BinaryAttachment='Hello World!\n'.encode(),
+        Delivery=solclient.Message.DELIVERY_MODE_DIRECT)
+
+if err:
+    for n, e in err.items():
+        print('Cannot set {}:\t{}: {}'.format(n, type(e).__name__, str(e)))
+    raise RuntimeError('Cannot continue')
 
 session.sendMsg(msg)
 print('Message sent.')
+del msg
 
 time.sleep(0.1)
-
 while rxMsg < 1:
     time.sleep(1)
-
-del msg
 
 session.disconnect()

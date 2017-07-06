@@ -3,6 +3,7 @@ from ctypes import *
 from traceback import extract_stack as extract_stack
 from functools import singledispatch
 
+import inspect
 import os.path
 
 # ENUM callback types
@@ -17,18 +18,11 @@ DISPATCH_TYPE_CALLBACK = 1
 # Enable, Disable
 (PROP_DISABLE_VAL, PROP_ENABLE_VAL) = ("0", "1")
 
-# Delivery Mode
-(DELIVERY_MODE_DIRECT, DELIVERY_MODE_PERSISTENT, DELIVERY_MODE_NONPERSISTENT) = [ 0x00, 0x10, 0x20 ]
-
 # Some Props
 SOLCLIENT_MODIFYPROP_FLAGS_WAITFORCONFIRM = (0x01)
 SOLCLIENT_TRANSPORT_PROTOCOL_NULL = ("")
-SOLCLIENT_TRANSACTEDSESSION_PROP_HAS_PUBLISHER = "TRANSACTEDSESSION_HAS_PUBLISHER"
-SOLCLIENT_TRANSACTEDSESSION_PROP_CREATE_MESSAGE_DISPATCHER = "TRANSACTEDSESSION_CREATE_MESSAGE_DISPATCHER"
-SOLCLIENT_TRANSACTEDSESSION_PROP_REQUESTREPLY_TIMEOUT_MS = "TRANSACTEDSESSION_REQUESTREPLY_TIMEOUT_MS"
-SOLCLIENT_TRANSACTEDSESSION_PROP_DEFAULT_HAS_PUBLISHER = PROP_ENABLE_VAL
-SOLCLIENT_TRANSACTEDSESSION_PROP_DEFAULT_CREATE_MESSAGE_DISPATCHER = PROP_DISABLE_VAL
-SOLCLIENT_TRANSACTEDSESSION_PROP_DEFAULT_REQUESTREPLY_TIMEOUT_MS = "10000"
+SOLCLIENT_SESSION_SEND_MULTIPLE_LIMIT = 50
+SOLCLIENT_MAX_SELECTOR_SIZE = (1023)
 
 @singledispatch
 def _toBytes(b):
@@ -60,6 +54,16 @@ class ErrorInfo(Structure):
 getLastErrorInfo = _lib.solClient_getLastErrorInfo
 getLastErrorInfo.argtypes = []
 getLastErrorInfo.restype = POINTER(ErrorInfo)
+
+class SubscribeFlags:
+    LOCAL_DISPATCH_ONLY = 0x08
+    REQUEST_CONFIRM = 0x10
+    RX_ALL_DELIVER_TO_ONE = 0x04
+    WAITFORCONFIRM = 0x02
+
+class ProvisionFlags:
+    IGNORE_EXIST_ERRORS = 0x02
+    WAITFORCONFIRM = 0x01
 
 class SessionEvent:
     # ENUM session events
@@ -107,7 +111,7 @@ class SubCode:
 # Errors
 #########
 
-class SolaceException(Exception):
+class SolaceError(Exception):
     def __init__(self, rc, msg):
         self.msg = msg
         self.rc = rc
@@ -411,6 +415,14 @@ class SessionProperties(_Properties):
     MAX_VPN_NAME_LEN = (32)
     MAX_VIRTUAL_ROUTER_NAME_LEN = (52)
 
+class TransactedSessionProperties(_Properties):
+    HAS_PUBLISHER = "TRANSACTEDSESSION_HAS_PUBLISHER"
+    CREATE_MESSAGE_DISPATCHER = "TRANSACTEDSESSION_CREATE_MESSAGE_DISPATCHER"
+    REQUESTREPLY_TIMEOUT_MS = "TRANSACTEDSESSION_REQUESTREPLY_TIMEOUT_MS"
+    DEFAULT_HAS_PUBLISHER = PROP_ENABLE_VAL
+    DEFAULT_CREATE_MESSAGE_DISPATCHER = PROP_DISABLE_VAL
+    DEFAULT_REQUESTREPLY_TIMEOUT_MS = "10000"
+
 ##############
 # ContextInfo
 ##############
@@ -447,7 +459,7 @@ class Context:
                 pointer(self.contextFuncInfo), sizeof(self.contextFuncInfo))
 
         if rc != ReturnCode.OK:
-            raise SolaceException(rc, "context.create")
+            raise SolaceError(rc, "context.create")
 
     def __del__(self):
         rc = _lib.solClient_context_destroy(byref(self._pt))
@@ -536,6 +548,13 @@ class SessionFuncInfo(Structure):
 #############
 
 class Session:
+    PEER_PLATFORM = "SESSION_PEER_PLATFORM"
+    PEER_PORT_SPEED = "SESSION_PEER_PORT_SPEED"
+    PEER_PORT_TYPE = "SESSION_PEER_PORT_TYPE"
+    PEER_ROUTER_NAME = "SESSION_PEER_ROUTER_NAME"
+    PEER_SOFTWARE_DATE = "SESSION_PEER_SOFTWARE_DATE"
+    PEER_SOFTWARE_VERSION = "SESSION_PEER_SOFTWARE_VERSION"
+
     def __init__(self, context, props, funcInfo = None):
         if funcInfo is None:
             funcInfo = SessionFuncInfo()
@@ -551,27 +570,27 @@ class Session:
                 pointer(self.funcInfo), sizeof(funcInfo))
 
         if rc != ReturnCode.OK:
-            raise SolaceException(rc, "session.create")
+            raise SolaceError(rc, "session.create")
 
     def connect(self):
         rc = _lib.solClient_session_connect(self._pt)
 
         # no thorough checks on blocking or not
         if rc != ReturnCode.OK and rc != ReturnCode.IN_PROGRESS:
-            raise SolaceException(rc, "session.connect")
+            raise SolaceError(rc, "session.connect")
         return rc
 
     def disconnect(self):
         rc = _lib.solClient_session_disconnect(self._pt)
         
         if rc != ReturnCode.OK:
-            raise SolaceException(rc, "session.disconnect")
+            raise SolaceError(rc, "session.disconnect")
 
     def sendMsg(self, msg):
         rc = _lib.solClient_session_sendMsg(self._pt, msg._pt)
 
         if rc != ReturnCode.OK and rc != ReturnCode.WOULD_BLOCK:
-            raise SolaceException(rc, "session.sendMsg")
+            raise SolaceError(rc, "session.sendMsg")
         return rc
     
     def topicSubscribe(self, topic, flags = None):
@@ -581,7 +600,7 @@ class Session:
             rc = _lib.solClient_session_topicSubscribeExt(self._pt, flags, topic.encode())
 
         if rc != ReturnCode.OK and rc != ReturnCode.WOULD_BLOCK and rc != ReturnCode.IN_PROGRESS:
-            raise SolaceException(rc, "session.topicSubscribe")
+            raise SolaceError(rc, "session.topicSubscribe")
 
     def topicSubscribeDispatch(self, topic, flags, dispatchFunc, user):
         pass
@@ -591,6 +610,9 @@ class Session:
 
         if rc != ReturnCode.OK:
             printLastError(rc, "session.destroy")
+
+class TransactedSession:
+    MAX_SESSION_NAME_LENGTH = 64
 
 # Dest
 class Destination(Structure):
@@ -607,31 +629,113 @@ class Destination(Structure):
 
 # Message
 class Message:
+    (COS_1, COS_2, COS_3) = range(3)
+    (DELIVERY_MODE_DIRECT, DELIVERY_MODE_PERSISTENT, DELIVERY_MODE_NONPERSISTENT) = ( 0x00, 0x10, 0x20 )
+
     def __init__(self):
         self._pt = c_void_p()
         rc = _lib.solClient_msg_alloc(byref(self._pt))
 
         if rc != ReturnCode.OK:
-            raise SolaceException(rc, "msg.alloc")
+            raise SolaceError(rc, "msg.alloc")
 
-    def setDeliveryMode(self, m):
-        rc = _lib.solClient_msg_setDeliveryMode(self._pt, m)
-
-        if rc != ReturnCode.OK:
-            raise SolaceException(rc, "msg.setDeliveryMode")
-
-    def setDestination(self, d):
-        rc = _lib.solClient_msg_setDestination(self._pt, pointer(d), sizeof(d))
+    def setAppMsgId(self, id):
+        rc = _lib.solClient_msg_setApplicationMessageId(self._pt, _toBytes(id))
 
         if rc != ReturnCode.OK:
-            raise SolaceException("msg.setDestination")
+            raise SolaceError(rc, "msg.setAppMsgId")
 
     def setBinaryAttachment(self, bytes):
         # bytes are copied into the message
         rc = _lib.solClient_msg_setBinaryAttachment(self._pt, bytes, len(bytes))
 
         if rc != ReturnCode.OK:
-            raise SolaceException(rc, "msg.setBinAttach")
+            raise SolaceError(rc, "msg.setBinAttach")
+
+    def setCOS(self, cos):
+        rc = _lib.solClient_msg_setClassOfService(self._pt, c_uint32(cos))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setCOS")
+
+    def setCorrId(self, corrId):
+        rc = _lib.solClient_msg_setCorrelationId(self._pt, _toBytes(corrId))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setCorrId")
+
+    def setDTO(self, dto):
+        rc = _lib.solClient_msg_setDeliverToOne(self._pt, c_ubyte(1 if dto else 0))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setDTO")
+
+    def setDelivery(self, mode):
+        rc = _lib.solClient_msg_setDeliveryMode(self._pt, c_uint32(mode))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setDelivery")
+
+    def setDest(self, d):
+        rc = _lib.solClient_msg_setDestination(self._pt, pointer(d), sizeof(d))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setDestination")
+
+    def setDMQ(self, dmq):
+        rc = _lib.solClient_msg_setDMQEligible(self._pt, c_ubyte(1 if dmq else 0))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setDMQ")
+
+    def setEliding(self, elide):
+        rc = _lib.solClient_msg_setElidingEligible(self._pt, c_ubyte(1 if elide else 0))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setEliding")
+
+    def setReplyTo(self, d):
+        rc = _lib.solClient_msg_setReplyTo(self._pt, pointer(d), sizeof(d))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setReplyTo")
+
+    def setSenderId(self, id):
+        rc = _lib.solClient_msg_setSenderId(self._pt, _toBytes(id))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setSenderId")
+
+    def setSenderTimestamp(self, ts):
+        rc = _lib.solClient_msg_setSenderTimestamp(self._pt, c_int64(ts))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setSenderId")
+
+    def setSeqNum(self, n):
+        rc = _lib.solClient_msg_setSequenceNumber(self._pt, c_int64(ts))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setSeqNum")
+
+    def setTTL(self, ttl):
+        rc = _lib.solClient_msg_setTimeToLive(self._pt, c_int64(ttl))
+
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, "msg.setTTL")
+
+    def applyProps(self, **kwargs):
+        setMethods = dict(inspect.getmembers(self, predicate=\
+                lambda f: inspect.ismethod(f) and f.__name__[:3] == 'set'))
+
+        errors = {}
+        for name, value in kwargs.items():
+            try:
+                setMethods['set'+name](value)
+            except Exception as e:
+                errors[name] = e
+
+        return errors
 
     def __del__(self):
         rc = _lib.solClient_msg_free(byref(self._pt))
@@ -639,10 +743,11 @@ class Message:
         if rc != ReturnCode.OK:
             printLastError(rc, "msg.free")
 
-
 # init, set to error
 _lib.solClient_initialize( LOG.ERROR, c_void_p() )
 
-import atexit
-atexit.register(_lib.solClient_cleanup)
+def cleanup():
+    _lib.solClient_cleanup()
 
+import atexit
+atexit.register(cleanup)

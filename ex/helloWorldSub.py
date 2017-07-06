@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import solclient
+import pysolclient as solclient
 import sys
 
 if len(sys.argv) < 5:
