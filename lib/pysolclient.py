@@ -1,6 +1,6 @@
 from ctypes import *
 
-from traceback import extract_stack as extract_stack
+from traceback import extract_stack as extract_stack, format_exc
 from functools import singledispatch
 
 import inspect
@@ -88,6 +88,20 @@ class ReturnCode:
     @classmethod
     def toString(cls, event):
         return cls._toString(event).decode()
+
+    @staticmethod
+    def raiseNotOK(rc, f, args):
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, f.__name__)
+
+    @staticmethod
+    def getAttributeFunction(rc, f, args):
+        if rc == ReturnCode.NOT_FOUND:
+            return None
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, f.__name__)
+
+        return args[1]._obj.value
     
 class SubCode:
     # ENUM subcodes 1
@@ -120,6 +134,7 @@ class SolaceError(Exception):
         self.subCode = info_p.contents.subCode
         self.responseCode = info_p.contents.responseCode
         self.errorStr = info_p.contents.errorStr.decode()
+        self.trace = format_exc()
 
         # format the message
         message = '{} - ReturnCode="{}", SubCode="{}", ResponseCode={}, Info="{}"\n'.format(self.msg,
@@ -316,6 +331,49 @@ class SessionProperties(_Properties):
     SSL_TRUSTED_COMMON_NAME_LIST = "SESSION_SSL_TRUSTED_COMMON_NAME_LIST"
     GD_RECONNECT_FAIL_ACTION_AUTO_RETRY = ("GD_RECONNECT_FAIL_ACTION_AUTO_RETRY")
     GD_RECONNECT_FAIL_ACTION_DISCONNECT = ("GD_RECONNECT_FAIL_ACTION_DISCONNECT")
+    SSL_CIPHER_ECDHE_RSA_AES256_GCM_SHA384 = ("ECDHE-RSA-AES256-GCM-SHA384")
+    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 = ("TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384")
+    SSL_CIPHER_ECDHE_RSA_AES256_SHA384 = ("ECDHE-RSA-AES256-SHA384")
+    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 = ("TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384")
+    SSL_CIPHER_ECDHE_RSA_AES256_SHA = ("ECDHE-RSA-AES256-SHA")
+    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA = ("TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA")
+    SSL_CIPHER_AES256_GCM_SHA384 = ("AES256-GCM-SHA384")
+    SSL_CIPHER_TLS_RSA_WITH_AES_256_GCM_SHA384 = ("TLS_RSA_WITH_AES_256_GCM_SHA384")
+    SSL_CIPHER_AES256_SHA256 = ("AES256-SHA256")
+    SSL_CIPHER_TLS_RSA_WITH_AES_256_CBC_SHA256 = ("TLS_RSA_WITH_AES_256_CBC_SHA256")
+    SSL_CIPHER_AES256_SHA = ("AES256-SHA")
+    SSL_CIPHER_TLS_RSA_WITH_AES_256_CBC_SHA = ("TLS_RSA_WITH_AES_256_CBC_SHA")
+    SSL_CIPHER_ECDHE_RSA_DES_CBC3_SHA = ("ECDHE-RSA-DES-CBC3-SHA")
+    SSL_CIPHER_TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA = ("TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA")
+    SSL_CIPHER_DES_CBC3_SHA = ("DES-CBC3-SHA")
+    SSL_CIPHER_SSL_RSA_WITH_3DES_EDE_CBC_SHA = ("SSL_RSA_WITH_3DES_EDE_CBC_SHA")
+    SSL_CIPHER_ECDHE_RSA_AES128_GCM_SHA256 = ("ECDHE-RSA-AES128-GCM-SHA256")
+    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 = ("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
+    SSL_CIPHER_ECDHE_RSA_AES128_SHA256 = ("ECDHE-RSA-AES128-SHA256")
+    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 = ("TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256")
+    SSL_CIPHER_ECDHE_RSA_AES128_SHA = ("ECDHE-RSA-AES128-SHA")
+    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA = ("TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA")
+    SSL_CIPHER_AES128_GCM_SHA256 = ("AES128-GCM-SHA256")
+    SSL_CIPHER_TLS_RSA_WITH_AES_128_GCM_SHA256 = ("TLS_RSA_WITH_AES_128_GCM_SHA256")
+    SSL_CIPHER_AES128_SHA256 = ("AES128-SHA256")
+    SSL_CIPHER_TLS_RSA_WITH_AES_128_CBC_SHA256 = ("TLS_RSA_WITH_AES_128_CBC_SHA256")
+    SSL_CIPHER_AES128_SHA = ("AES128-SHA")
+    SSL_CIPHER_TLS_RSA_WITH_AES_128_CBC_SHA = ("TLS_RSA_WITH_AES_128_CBC_SHA")
+    SSL_CIPHER_RC4_SHA = ("RC4-SHA")
+    SSL_CIPHER_SSL_RSA_WITH_RC4_128_SHA = ("SSL_RSA_WITH_RC4_128_SHA")
+    SSL_CIPHER_RC4_MD5 = ("RC4-MD5")
+    SSL_CIPHER_SSL_RSA_WITH_RC4_128_MD5 = ("SSL_RSA_WITH_RC4_128_MD5")
+    SSL_PROTOCOL_TLSV1_2 = ("TLSv1.2")
+    SSL_PROTOCOL_TLSV1_1 = ("TLSv1.1")
+    SSL_PROTOCOL_TLSV1 = ("TLSv1")
+    SSL_PROTOCOL_SSLV3 = ("SSLv3")
+    MAX_USERNAME_LEN = (189)
+    MAX_PASSWORD_LEN = (128)
+    MAX_HOSTS = (16)
+    MAX_APP_DESC = (255)
+    MAX_CLIENT_NAME_LEN = (160)
+    MAX_VPN_NAME_LEN = (32)
+    MAX_VIRTUAL_ROUTER_NAME_LEN = (52)
     DEFAULT_USERNAME = ""
     DEFAULT_PASSWORD = ""
     DEFAULT_HOST = "127.0.0.1"
@@ -371,49 +429,6 @@ class SessionProperties(_Properties):
     DEFAULT_WEB_TRANSPORT_PROTOCOL = SOLCLIENT_TRANSPORT_PROTOCOL_NULL
     DEFAULT_TRANSPORT_PROTOCOL_DOWNGRADE_TIMEOUT_MS = ("3000")
     DEFAULT_GD_RECONNECT_FAIL_ACTION = GD_RECONNECT_FAIL_ACTION_AUTO_RETRY
-    SSL_CIPHER_ECDHE_RSA_AES256_GCM_SHA384 = ("ECDHE-RSA-AES256-GCM-SHA384")
-    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 = ("TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384")
-    SSL_CIPHER_ECDHE_RSA_AES256_SHA384 = ("ECDHE-RSA-AES256-SHA384")
-    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 = ("TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384")
-    SSL_CIPHER_ECDHE_RSA_AES256_SHA = ("ECDHE-RSA-AES256-SHA")
-    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA = ("TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA")
-    SSL_CIPHER_AES256_GCM_SHA384 = ("AES256-GCM-SHA384")
-    SSL_CIPHER_TLS_RSA_WITH_AES_256_GCM_SHA384 = ("TLS_RSA_WITH_AES_256_GCM_SHA384")
-    SSL_CIPHER_AES256_SHA256 = ("AES256-SHA256")
-    SSL_CIPHER_TLS_RSA_WITH_AES_256_CBC_SHA256 = ("TLS_RSA_WITH_AES_256_CBC_SHA256")
-    SSL_CIPHER_AES256_SHA = ("AES256-SHA")
-    SSL_CIPHER_TLS_RSA_WITH_AES_256_CBC_SHA = ("TLS_RSA_WITH_AES_256_CBC_SHA")
-    SSL_CIPHER_ECDHE_RSA_DES_CBC3_SHA = ("ECDHE-RSA-DES-CBC3-SHA")
-    SSL_CIPHER_TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA = ("TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA")
-    SSL_CIPHER_DES_CBC3_SHA = ("DES-CBC3-SHA")
-    SSL_CIPHER_SSL_RSA_WITH_3DES_EDE_CBC_SHA = ("SSL_RSA_WITH_3DES_EDE_CBC_SHA")
-    SSL_CIPHER_ECDHE_RSA_AES128_GCM_SHA256 = ("ECDHE-RSA-AES128-GCM-SHA256")
-    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 = ("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
-    SSL_CIPHER_ECDHE_RSA_AES128_SHA256 = ("ECDHE-RSA-AES128-SHA256")
-    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 = ("TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256")
-    SSL_CIPHER_ECDHE_RSA_AES128_SHA = ("ECDHE-RSA-AES128-SHA")
-    SSL_CIPHER_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA = ("TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA")
-    SSL_CIPHER_AES128_GCM_SHA256 = ("AES128-GCM-SHA256")
-    SSL_CIPHER_TLS_RSA_WITH_AES_128_GCM_SHA256 = ("TLS_RSA_WITH_AES_128_GCM_SHA256")
-    SSL_CIPHER_AES128_SHA256 = ("AES128-SHA256")
-    SSL_CIPHER_TLS_RSA_WITH_AES_128_CBC_SHA256 = ("TLS_RSA_WITH_AES_128_CBC_SHA256")
-    SSL_CIPHER_AES128_SHA = ("AES128-SHA")
-    SSL_CIPHER_TLS_RSA_WITH_AES_128_CBC_SHA = ("TLS_RSA_WITH_AES_128_CBC_SHA")
-    SSL_CIPHER_RC4_SHA = ("RC4-SHA")
-    SSL_CIPHER_SSL_RSA_WITH_RC4_128_SHA = ("SSL_RSA_WITH_RC4_128_SHA")
-    SSL_CIPHER_RC4_MD5 = ("RC4-MD5")
-    SSL_CIPHER_SSL_RSA_WITH_RC4_128_MD5 = ("SSL_RSA_WITH_RC4_128_MD5")
-    SSL_PROTOCOL_TLSV1_2 = ("TLSv1.2")
-    SSL_PROTOCOL_TLSV1_1 = ("TLSv1.1")
-    SSL_PROTOCOL_TLSV1 = ("TLSv1")
-    SSL_PROTOCOL_SSLV3 = ("SSLv3")
-    MAX_USERNAME_LEN = (189)
-    MAX_PASSWORD_LEN = (128)
-    MAX_HOSTS = (16)
-    MAX_APP_DESC = (255)
-    MAX_CLIENT_NAME_LEN = (160)
-    MAX_VPN_NAME_LEN = (32)
-    MAX_VIRTUAL_ROUTER_NAME_LEN = (52)
 
 class TransactedSessionProperties(_Properties):
     HAS_PUBLISHER = "TRANSACTEDSESSION_HAS_PUBLISHER"
@@ -422,6 +437,87 @@ class TransactedSessionProperties(_Properties):
     DEFAULT_HAS_PUBLISHER = PROP_ENABLE_VAL
     DEFAULT_CREATE_MESSAGE_DISPATCHER = PROP_DISABLE_VAL
     DEFAULT_REQUESTREPLY_TIMEOUT_MS = "10000"
+
+class FlowProperties(_Properties):
+    BIND_BLOCKING = "FLOW_BIND_BLOCKING" 
+    BIND_TIMEOUT_MS = "FLOW_BIND_TIMEOUT_MS" 
+    BIND_ENTITY_ID = "FLOW_BIND_ENTITY_ID" 
+    BIND_ENTITY_DURABLE = "FLOW_BIND_ENTITY_DURABLE" 
+    BIND_NAME = "FLOW_BIND_NAME" 
+    WINDOWSIZE = "FLOW_WINDOWSIZE" 
+    AUTOACK = "FLOW_AUTOACK" 
+    ACKMODE = "FLOW_ACKMODE" 
+    TOPIC = "FLOW_TOPIC" 
+    MAX_BIND_TRIES = "FLOW_MAX_BIND_TRIES" 
+    ACK_TIMER_MS = "FLOW_ACK_TIMER_MS" 
+    ACK_THRESHOLD = "FLOW_ACK_THRESHOLD" 
+    START_STATE = "FLOW_START_STATE" 
+    SELECTOR = "FLOW_SELECTOR" 
+    NO_LOCAL = "FLOW_NO_LOCAL" 
+    FORWARDING_MODE = "FLOW_FORWARDING_MODE" 
+    MAX_UNACKED_MESSAGES = "FLOW_MAX_UNACKED_MESSAGES" 
+    BROWSER = "FLOW_BROWSER" 
+    ACTIVE_FLOW_IND = "FLOW_ACTIVE_FLOW_IND" 
+    BIND_ENTITY_SUB = "1" 
+    BIND_ENTITY_QUEUE = "2" 
+    BIND_ENTITY_TE = "3" 
+    BIND_ENTITY_DTE = BIND_ENTITY_TE 
+    ACKMODE_AUTO = "1" 
+    ACKMODE_CLIENT = "2" 
+    FORWARDING_MODE_STORE_AND_FORWARD = "1" 
+    FORWARDING_MODE_CUT_THROUGH = "2" 
+    DEFAULT_BIND_BLOCKING = PROP_ENABLE_VAL 
+    DEFAULT_BIND_TIMEOUT_MS = "10000" 
+    DEFAULT_BIND_ENTITY_ID = BIND_ENTITY_SUB 
+    DEFAULT_BIND_ENTITY_DURABLE = PROP_ENABLE_VAL 
+    DEFAULT_BIND_NAME = "" 
+    DEFAULT_WINDOWSIZE = "255" 
+    DEFAULT_AUTOACK = PROP_ENABLE_VAL 
+    DEFAULT_TOPIC = "" 
+    DEFAULT_MAX_BIND_TRIES = "3" 
+    DEFAULT_ACK_TIMER_MS = "1000" 
+    DEFAULT_ACK_THRESHOLD = "60" 
+    DEFAULT_START_STATE = PROP_ENABLE_VAL 
+    DEFAULT_SELECTOR = "" 
+    DEFAULT_NO_LOCAL = PROP_DISABLE_VAL 
+    DEFAULT_FORWARDING_MODE = FORWARDING_MODE_STORE_AND_FORWARD 
+    DEFAULT_MAX_UNACKED_MESSAGES = "-1" 
+    DEFAULT_BROWSER = PROP_DISABLE_VAL 
+    DEFAULT_ACTIVE_FLOW_IND = PROP_DISABLE_VAL 
+
+class EndpointProperties(_Properties):
+    ID = "ENDPOINT_ID" 
+    NAME = "ENDPOINT_NAME" 
+    DURABLE = "ENDPOINT_DURABLE" 
+    PERMISSION = "ENDPOINT_PERMISSION" 
+    ACCESSTYPE = "ENDPOINT_ACCESSTYPE" 
+    QUOTA_MB = "ENDPOINT_QUOTA_MB" 
+    MAXMSG_SIZE = "ENDPOINT_MAXMSG_SIZE" 
+    RESPECTS_MSG_TTL = "ENDPOINT_RESPECTS_MSG_TTL" 
+    DISCARD_BEHAVIOR = "ENDPOINT_DISCARD_BEHAVIOR" 
+    MAXMSG_REDELIVERY = "ENDPOINT_MAXMSG_REDELIVERY" 
+    QUEUE = "2" 
+    TE = "3" 
+    CLIENT_NAME = "4" 
+    ACCESSTYPE_NONEXCLUSIVE = "0" 
+    ACCESSTYPE_EXCLUSIVE = "1" 
+    DISCARD_NOTIFY_SENDER_ON = "1" 
+    DISCARD_NOTIFY_SENDER_OFF = "2" 
+    DEFAULT_ID = TE 
+    DEFAULT_DURABLE = PROP_ENABLE_VAL 
+    DEFAULT_RESPECTS_MSG_TTL = PROP_DISABLE_VAL 
+
+class CacheSessionProperties(_Properties):
+    CACHE_NAME = "CACHESESSION_CACHE_NAME" 
+    MAX_MSGS = "CACHESESSION_MAX_MSGS" 
+    MAX_AGE = "CACHESESSION_MAX_AGE" 
+    REQUESTREPLY_TIMEOUT_MS = "CACHESESSION_RR_TIMEOUT_MS" 
+    REPLY_TO = "CACHESESSION_REPLY_TO" 
+    DEFAULT_CACHE_NAME = "" 
+    DEFAULT_MAX_MSGS = "1" 
+    DEFAULT_MAX_AGE = "0" 
+    DEFAULT_REQUESTREPLY_TIMEOUT_MS = "10000" 
+    DEFAULT_REPLY_TO = "" 
 
 ##############
 # ContextInfo
@@ -544,6 +640,12 @@ class SessionFuncInfo(Structure):
                 ('rxMsgInfo', _Msg_Callback) ]
 
 #############
+# Flow
+#############
+class Flow:
+    pass
+
+#############
 # Session
 #############
 
@@ -632,97 +734,115 @@ class Message:
     (COS_1, COS_2, COS_3) = range(3)
     (DELIVERY_MODE_DIRECT, DELIVERY_MODE_PERSISTENT, DELIVERY_MODE_NONPERSISTENT) = ( 0x00, 0x10, 0x20 )
 
-    def __init__(self):
-        self._pt = c_void_p()
-        rc = _lib.solClient_msg_alloc(byref(self._pt))
+    _alloc = _lib.solClient_msg_alloc
+    _alloc.argtypes = [c_void_p]
+    _alloc.restype  = c_int
+    _alloc.errcheck = ReturnCode.raiseNotOK
+    def __init__(self, pt = None):
+        if pt is None:
+            self._pt = c_void_p()
+            self._alloc(byref(self._pt))
+        else:
+            self._pt = cast(pt, c_void_p)
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.alloc")
-
+    _setAppMsgId = _lib.solClient_msg_setApplicationMessageId
+    _setAppMsgId.argtypes = [c_void_p, c_char_p]
+    _setAppMsgId.restype  = c_int
+    _setAppMsgId.errcheck = ReturnCode.raiseNotOK
     def setAppMsgId(self, id):
-        rc = _lib.solClient_msg_setApplicationMessageId(self._pt, _toBytes(id))
+        self._setAppMsgId(self._pt, _toBytes(id))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setAppMsgId")
-
+    _setBinaryAttachment = _lib.solClient_msg_setBinaryAttachment
+    _setBinaryAttachment.argtypes = [c_void_p, c_void_p, c_uint32]
+    _setBinaryAttachment.restype  = c_int
+    _setBinaryAttachment.errcheck = ReturnCode.raiseNotOK
     def setBinaryAttachment(self, bytes):
         # bytes are copied into the message
-        rc = _lib.solClient_msg_setBinaryAttachment(self._pt, bytes, len(bytes))
+        self._setBinaryAttachment(self._pt, bytes, len(bytes))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setBinAttach")
-
+    _setCOS = _lib.solClient_msg_setClassOfService
+    _setCOS.argtypes = [c_void_p, c_uint32]
+    _setCOS.restype  = c_int
+    _setCOS.errcheck = ReturnCode.raiseNotOK
     def setCOS(self, cos):
-        rc = _lib.solClient_msg_setClassOfService(self._pt, c_uint32(cos))
+        self._setCOS(self._pt, c_uint32(cos))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setCOS")
-
+    _setCorrId = _lib.solClient_msg_setCorrelationId
+    _setCorrId.argtypes = [c_void_p, c_char_p]
+    _setCorrId.restype  = c_int
+    _setCorrId.errcheck = ReturnCode.raiseNotOK
     def setCorrId(self, corrId):
-        rc = _lib.solClient_msg_setCorrelationId(self._pt, _toBytes(corrId))
+        self._setCorrId(self._pt, _toBytes(corrId))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setCorrId")
-
+    _setDTO = _lib.solClient_msg_setDeliverToOne
+    _setDTO.argtypes = [c_void_p, c_ubyte]
+    _setDTO.restype  = c_int
+    _setDTO.errcheck = ReturnCode.raiseNotOK
     def setDTO(self, dto):
-        rc = _lib.solClient_msg_setDeliverToOne(self._pt, c_ubyte(1 if dto else 0))
+        self._setDTO(self._pt, c_ubyte(1 if dto else 0))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setDTO")
-
+    _setDelivery = _lib.solClient_msg_setDeliveryMode
+    _setDelivery.argtypes = [c_void_p, c_uint32]
+    _setDelivery.restype  = c_int
+    _setDelivery.errcheck = ReturnCode.raiseNotOK
     def setDelivery(self, mode):
-        rc = _lib.solClient_msg_setDeliveryMode(self._pt, c_uint32(mode))
+        self._setDelivery(self._pt, c_uint32(mode))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setDelivery")
-
+    _setDest = _lib.solClient_msg_setDestination
+    _setDest.argtypes = [c_void_p, c_void_p, c_size_t]
+    _setDest.restype  = c_int
+    _setDest.errcheck = ReturnCode.raiseNotOK
     def setDest(self, d):
-        rc = _lib.solClient_msg_setDestination(self._pt, pointer(d), sizeof(d))
+        self._setDest(self._pt, pointer(d), sizeof(d))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setDestination")
-
+    _setDMQ = _lib.solClient_msg_setDMQEligible
+    _setDMQ.argtypes = [c_void_p, c_ubyte]
+    _setDMQ.restype  = c_int
+    _setDMQ.errcheck = ReturnCode.raiseNotOK
     def setDMQ(self, dmq):
-        rc = _lib.solClient_msg_setDMQEligible(self._pt, c_ubyte(1 if dmq else 0))
+        self._setDMQ(self._pt, c_ubyte(1 if dmq else 0))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setDMQ")
-
+    _setEliding = _lib.solClient_msg_setElidingEligible
+    _setEliding.argtypes = [c_void_p, c_ubyte]
+    _setEliding.restype  = c_int
+    _setEliding.errcheck = ReturnCode.raiseNotOK
     def setEliding(self, elide):
-        rc = _lib.solClient_msg_setElidingEligible(self._pt, c_ubyte(1 if elide else 0))
+        self._setEliding(self._pt, c_ubyte(1 if elide else 0))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setEliding")
-
+    _setReplyTo = _lib.solClient_msg_setReplyTo
+    _setReplyTo.argtypes = [c_void_p, c_void_p, c_size_t]
+    _setReplyTo.restype  = c_int
+    _setReplyTo.errcheck = ReturnCode.raiseNotOK
     def setReplyTo(self, d):
-        rc = _lib.solClient_msg_setReplyTo(self._pt, pointer(d), sizeof(d))
+        self._setReplyTo(self._pt, pointer(d), sizeof(d))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setReplyTo")
-
+    _setSenderId = _lib.solClient_msg_setSenderId
+    _setSenderId.argtypes = [c_void_p, c_char_p]
+    _setSenderId.restype  = c_int
+    _setSenderId.errcheck = ReturnCode.raiseNotOK
     def setSenderId(self, id):
-        rc = _lib.solClient_msg_setSenderId(self._pt, _toBytes(id))
+        self._setSenderId(self._pt, _toBytes(id))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setSenderId")
-
+    _setSenderTimestamp = _lib.solClient_msg_setSenderTimestamp
+    _setSenderTimestamp.argtypes = [c_void_p, c_int64]
+    _setSenderTimestamp.restype  = c_int
+    _setSenderTimestamp.errcheck = ReturnCode.raiseNotOK
     def setSenderTimestamp(self, ts):
-        rc = _lib.solClient_msg_setSenderTimestamp(self._pt, c_int64(ts))
+        self._setSenderTimestamp(self._pt, c_int64(ts))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setSenderId")
-
+    _setSeqNum = _lib.solClient_msg_setSequenceNumber
+    _setSeqNum.argtypes = [c_void_p, c_int64]
+    _setSeqNum.restype  = c_int
+    _setSeqNum.errcheck = ReturnCode.raiseNotOK
     def setSeqNum(self, n):
-        rc = _lib.solClient_msg_setSequenceNumber(self._pt, c_int64(ts))
+        self._setSeqNum(self._pt, c_int64(ts))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setSeqNum")
-
+    _setTTL = _lib.solClient_msg_setTimeToLive
+    _setTTL.argtypes = [c_void_p, c_int64]
+    _setTTL.restype  = c_int
+    _setTTL.errcheck = ReturnCode.raiseNotOK
     def setTTL(self, ttl):
-        rc = _lib.solClient_msg_setTimeToLive(self._pt, c_int64(ttl))
-
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "msg.setTTL")
+        self._setTTL(self._pt, c_int64(ttl))
 
     def applyProps(self, **kwargs):
         setMethods = dict(inspect.getmembers(self, predicate=\
@@ -736,6 +856,30 @@ class Message:
                 errors[name] = e
 
         return errors
+
+    _getMsgId = _lib.solClient_msg_getMsgId
+    _getMsgId.argtypes = [c_void_p, c_void_p]
+    _getMsgId.restype  = c_int
+    _getMsgId.errcheck = ReturnCode.getAttributeFunction
+
+    def getMsgId(self):
+        return self._getMsgId(self._pt, byref(c_uint64()))
+
+    _getSeqNum = _lib.solClient_msg_getSequenceNumber
+    _getSeqNum.argtypes = [c_void_p, c_void_p]
+    _getSeqNum.restype  = c_int
+    _getSeqNum.errcheck = ReturnCode.getAttributeFunction
+
+    def getSeqNum(self):
+        return self._getSeqNum(self._pt, byref(c_int64()))
+
+    _isDiscardIndicated = _lib.solClient_msg_isDiscardIndication
+    _isDiscardIndicated.argtypes = [c_void_p]
+    _isDiscardIndicated.restype  = c_ubyte
+    _isDiscardIndicated.errcheck = lambda r, f, args: r != 0
+    
+    def isDiscardIndicated(self):
+        return self._isDiscardIndicated(self._pt)
 
     def __del__(self):
         rc = _lib.solClient_msg_free(byref(self._pt))
