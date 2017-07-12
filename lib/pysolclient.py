@@ -717,6 +717,18 @@ class Destination(Structure):
     def __init__(self, dest=None, destType=TOPIC):
         super().__init__(destType, _toBytes(dest))
 
+    def __eq__(self, other):
+        for fld in self._fields_:
+            if getattr(self, fld[0]) != getattr(other, fld[0]):
+                return False
+        return True
+
+    def __ne__(self, other):
+        for fld in self._fields_:
+            if getattr(self, fld[0]) != getattr(other, fld[0]):
+                return True
+        return False
+
     def setDest(self, d):
         self.dest = _toBytes(d)
 
@@ -728,7 +740,7 @@ class _MessageAttribute:
         if rc != ReturnCode.OK:
             raise SolaceError(rc, f.__name__)
 
-        return args[1]._obj.value
+        return args[1]._obj
 
     @staticmethod
     def returnRefCharArrayAsBytes(rc, f, args):
@@ -738,6 +750,10 @@ class _MessageAttribute:
             raise SolaceError(rc, f.__name__)
 
         return cast(args[1]._obj, POINTER(c_char * args[2]._obj.value)).contents.raw
+
+    @staticmethod
+    def returnBool(rc, f, args):
+        return rc != 0
 
 # Message
 class Message:
@@ -768,10 +784,7 @@ class Message:
     _setBinaryAttachment.errcheck = ReturnCode.raiseNotOK
     def setBinaryAttachment(self, bytes):
         # bytes are copied into the message
-        if bytes is not None:
-            self._setBinaryAttachment(self._pt, bytes, len(bytes))
-        else:
-            self._setBinaryAttachment(self._pt, None, 0)
+        self._setBinaryAttachment(self._pt, bytes, 0 if bytes is None else len(bytes))
 
     _setCOS = _lib.solClient_msg_setClassOfService
     _setCOS.argtypes = [c_void_p, c_uint32]
@@ -823,7 +836,7 @@ class Message:
         self._setEliding(self._pt, c_ubyte(1 if elide else 0))
 
     _setReplyTo = _lib.solClient_msg_setReplyTo
-    _setReplyTo.argtypes = [c_void_p, c_void_p, c_size_t]
+    _setReplyTo.argtypes = [c_void_p, POINTER(Destination), c_size_t]
     _setReplyTo.restype  = c_int
     _setReplyTo.errcheck = ReturnCode.raiseNotOK
     def setReplyTo(self, d):
@@ -875,7 +888,7 @@ class Message:
     _getAppMsgId.restype  = c_int
     _getAppMsgId.errcheck = _MessageAttribute.returnRefParam1
     def getAppMsgId(self):
-        return self._getAppMsgId(self._pt, byref(c_char_p())).decode()
+        return self._getAppMsgId(self._pt, byref(c_char_p())).value.decode()
 
     _getBinaryAttachment = _lib.solClient_msg_getBinaryAttachmentPtr
     _getBinaryAttachment.argtypes = [c_void_p, c_void_p, POINTER(c_uint32)]
@@ -884,40 +897,90 @@ class Message:
     def getBinaryAttachment(self):
         return self._getBinaryAttachment(self._pt, byref(c_void_p()), byref(c_uint32()))
 
+    _getCacheStatus = _lib.solClient_msg_isCacheMsg
+    _getCacheStatus.argtypes = [c_void_p]
+    _getCacheStatus.restype  = c_int
+    _getCacheStatus.errcheck = _MessageAttribute.returnRefParam1
+    def getCacheStatus(self):
+        return self._getCacheStatus(self._pt).value
+
     _getCOS = _lib.solClient_msg_getClassOfService
     _getCOS.argtypes = [c_void_p, POINTER(c_uint32)]
     _getCOS.restype  = c_int
     _getCOS.errcheck = _MessageAttribute.returnRefParam1
     def getCOS(self):
-        return self._getCOS(self._pt, byref(c_uint32()))
+        return self._getCOS(self._pt, byref(c_uint32())).value
+
+    _getDest = _lib.solClient_msg_getDestination
+    _getDest.argtypes = [c_void_p, POINTER(Destination), c_size_t]
+    _getDest.restype  = c_int
+    _getDest.errcheck = _MessageAttribute.returnRefParam1
+    def getDest(self):
+        return self._getDest(self._pt, byref(Destination()), sizeof(Destination))
 
     _getMsgId = _lib.solClient_msg_getMsgId
     _getMsgId.argtypes = [c_void_p, POINTER(c_uint64)]
     _getMsgId.restype  = c_int
     _getMsgId.errcheck = _MessageAttribute.returnRefParam1
     def getMsgId(self):
-        return self._getMsgId(self._pt, byref(c_uint64()))
+        return self._getMsgId(self._pt, byref(c_uint64())).value
 
     _getSeqNum = _lib.solClient_msg_getSequenceNumber
     _getSeqNum.argtypes = [c_void_p, POINTER(c_int64)]
     _getSeqNum.restype  = c_int
     _getSeqNum.errcheck = _MessageAttribute.returnRefParam1
     def getSeqNum(self):
-        return self._getSeqNum(self._pt, byref(c_int64()))
+        return self._getSeqNum(self._pt, byref(c_int64())).value
 
     _getTTL = _lib.solClient_msg_getTimeToLive
     _getTTL.argtypes = [c_void_p, POINTER(c_int64)]
     _getTTL.restype  = c_int
     _getTTL.errcheck = _MessageAttribute.returnRefParam1
     def getTTL(self):
-        return self._getTTL(self._pt, byref(c_int64()))
+        return self._getTTL(self._pt, byref(c_int64())).value
 
     _isDiscardIndicated = _lib.solClient_msg_isDiscardIndication
     _isDiscardIndicated.argtypes = [c_void_p]
     _isDiscardIndicated.restype  = c_ubyte
-    _isDiscardIndicated.errcheck = lambda r, f, args: r != 0
+    _isDiscardIndicated.errcheck = _MessageAttribute.returnBool
     def isDiscardIndicated(self):
         return self._isDiscardIndicated(self._pt)
+
+    _isDTO = _lib.solClient_msg_isDeliverToOne
+    _isDTO.argtypes = [c_void_p]
+    _isDTO.restype  = c_ubyte
+    _isDTO.errcheck = _MessageAttribute.returnBool
+    def isDTO(self):
+        return self._isDTO(self._pt)
+
+    _isDMQ = _lib.solClient_msg_isDMQEligible
+    _isDMQ.argtypes = [c_void_p]
+    _isDMQ.restype  = c_ubyte
+    _isDMQ.errcheck = _MessageAttribute.returnBool
+    def isDMQ(self):
+        return self._isDMQ(self._pt)
+
+    _isEliding = _lib.solClient_msg_isElidingEligible
+    _isEliding.argtypes = [c_void_p]
+    _isEliding.restype  = c_ubyte
+    _isEliding.errcheck = _MessageAttribute.returnBool
+    def isEliding(self):
+        return self._isEliding(self._pt)
+
+    _isRedelivered = _lib.solClient_msg_isRedelivered
+    _isRedelivered.argtypes = [c_void_p]
+    _isRedelivered.restype  = c_ubyte
+    _isRedelivered.errcheck = _MessageAttribute.returnBool
+    def isRedelivered(self):
+        return self._isRedelivered(self._pt)
+
+    _isReplyMsg = _lib.solClient_msg_isReplyMsg
+    _isReplyMsg.argtypes = [c_void_p]
+    _isReplyMsg.restype  = c_ubyte
+    _isReplyMsg.errcheck = _MessageAttribute.returnBool
+    def isReplyMsg(self):
+        return self._isReplyMsg(self._pt)
+
 
     def __del__(self):
         rc = _lib.solClient_msg_free(byref(self._pt))

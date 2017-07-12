@@ -4,6 +4,23 @@ from ctypes import *
 import time
 import pprint
 
+def test_destination_eq():
+    c = Destination()
+    d = Destination()
+
+    c.setDest('c')
+    d.setDest('d')
+    assert c != d
+
+    d.setDest('c')
+    assert c == d
+
+    c.destType = Destination.QUEUE
+    assert c != d
+
+    d.destType = Destination.QUEUE
+    assert c == d
+
 def test_connect_non_blocking():
     context = Context()
 
