@@ -802,7 +802,7 @@ class Message:
         self._setDelivery(self._pt, c_uint32(mode))
 
     _setDest = _lib.solClient_msg_setDestination
-    _setDest.argtypes = [c_void_p, c_void_p, c_size_t]
+    _setDest.argtypes = [c_void_p, POINTER(Destination), c_size_t]
     _setDest.restype  = c_int
     _setDest.errcheck = ReturnCode.raiseNotOK
     def setDest(self, d):
