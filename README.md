@@ -1,2 +1,2 @@
 # pysolclient
-Python wrapper of solclient using ctypes
+Rudimentary python wrapper over solclient using ctypes
