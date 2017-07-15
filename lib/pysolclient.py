@@ -177,41 +177,48 @@ def printLastError(rc, errorStr):
 # Properties
 ############
 
-from collections.abc import MutableMapping
-#from itertools import chain, zip_longest
+"""
+_Properties class ensure only the symbolic property names get set via __setattr__().
+Translation from symbolic property names to actual values get defined in the respective subclasses.
+Actual translation happens at toCPropsArray and back.
+"""
+class _MetaProperties(type):
+    def __init__(cls, name, bases, d):
+        type.__init__(cls, name, bases, d)
+        cls._rdict = {}
+        for k, v in vars(cls).items():
+            if type(v) is str:
+                cls._rdict[v] = k
 
-class _Properties(MutableMapping):
-    def __init__(self, *args, **kw):
-        self._dict = dict(*args, **kw)
-    def __getitem__(self, key):
-        return self._dict[key]
-    def __iter__(self):
-        return iter(self._dict)
-    def __len__(self):
-        return len(self._dict)
-    def __setitem__(self, key, value):
-        self._dict[key] = value
-    def __delitem__(self, key):
-        del self._dict[key]
+class _Properties(metaclass=_MetaProperties):
+    def __init__(self, *args, **kwargs):
+        for k, v in args:
+            setattr(self, k, v)
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
+    def __setattr__(self, k, v):
+        if not k in vars(type(self)).keys():
+            raise AttributeError('Property {} does not exist'.format(k))
+        self.__dict__[k] = v
+    
     def toCPropsArray(self):
         # one-liner magic is actually slower, verified with timeit!
         #
-        #props = (c_char_p * (2 * len(self._dict) + 1))(
-        #        *list(map(_toBytes, chain.from_iterable(self._dict.items()))), None)
-        
+        #props = (c_char_p * (2 * len(vars(self)) + 1))(
+        #        *list(map(_toBytes, chain.from_iterable(vars(self)))), None)
+
         def iterProps(d):
             for k, v in d.items():
-                yield _toBytes(k)
+                yield _toBytes(getattr(type(self), k))
                 yield _toBytes(v)
-
-        props = (c_char_p * (2 * len(self._dict) + 1))(
-                *list(iterProps(self._dict)), None)
-
+                
+        props = (c_char_p * (2 * len(vars(self)) + 1))( \
+                *list(iterProps(vars(self))), None)
         return props
 
     @classmethod
-    def fromCPropsArray(cls, props):
+    def iterCPropsArray(cls, rdict, props):
         # one-liner magic is actually slower, verified with timeit!
         #
         #return cls( zip_longest(
@@ -219,9 +226,9 @@ class _Properties(MutableMapping):
 
         def iterProps(p):
             for idx in range(0, len(p)-1, 2):
-                yield (p[idx].decode(), p[idx+1].decode())
+                yield (rdict[p[idx].decode()], p[idx+1].decode())
 
-        return cls(iterProps(props))
+        return iterProps(props)
 
 class ContextProperties(_Properties):
     def __init__(self, *args, **kw):
@@ -235,7 +242,7 @@ class ContextProperties(_Properties):
                 props = props_t.in_dll(_lib, '_solClient_contextPropsDefaultWithCreateThread')
                 lastProp = props[-1]
                 propLen += 2
-            super().__init__(super().fromCPropsArray(props))
+            super().__init__(*super().iterCPropsArray(self._rdict, props))
 
     # context property defines
     TIME_RES_MS = "CONTEXT_TIME_RES_MS"

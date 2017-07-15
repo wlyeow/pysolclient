@@ -18,7 +18,7 @@ class Parser(metaclass=MetaParser):
     class User:
         def __init__(self, param):
             tmp = param.split('@')
-            self.name = tmp[0]
+            self.name = tmp[0] if tmp[0] != '' else 'default'
             if len(tmp) > 1:
                 self.vpn = tmp[1]
             else:

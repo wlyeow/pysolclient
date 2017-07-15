@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
 
-import pysolclient as solclient
+from pysolclient import *
 import sys
 
 if len(sys.argv) < 5:
     print('Usage: {} <ip> <vpn> <username> <topic>'.format(sys.argv[0]), file=sys.stderr)
     sys.exit(1)
 
-solclient.LOG.setFilterLevel(
-        solclient.LOG.CATEGORY_APP,
-        solclient.LOG.INFO)
+LOG.setFilterLevel(
+        LOG.CATEGORY_APP,
+        LOG.INFO)
 
-context = solclient.Context()
+context = Context()
 
-sprops = solclient.SessionProperties()
-sprops[ solclient.SessionProperties.HOST ] = sys.argv[1]
-sprops[ solclient.SessionProperties.VPN_NAME ] = sys.argv[2]
-sprops[ solclient.SessionProperties.USERNAME ] = sys.argv[3]
+sprops = SessionProperties(HOST=sys.argv[1], VPN_NAME=sys.argv[2])
+sprops.USERNAME = sys.argv[3]
+#sprops = SessionProperties()
+#sprops[ SessionProperties.HOST ] = sys.argv[1]
+#sprops[ SessionProperties.VPN_NAME ] = sys.argv[2]
+#sprops[ SessionProperties.USERNAME ] = sys.argv[3]
 
-session = solclient.Session(context, sprops)
+session = Session(context, sprops)
 session.connect()
 
-msg = solclient.Message()
-msg.setDest(solclient.Destination(sys.argv[4]))
+msg = Message()
+msg.setDest(Destination(sys.argv[4]))
 msg.setBinaryAttachment('Hello World!\n'.encode())
 
 session.sendMsg(msg)
