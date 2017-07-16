@@ -32,7 +32,7 @@ _toBytes.register(str, lambda s: s.encode())
 _toBytes.register(type(None), lambda b: None)
 
 ##############
-# Init Module
+# Init DLL
 ##############
 
 from ctypes.util import find_library
@@ -53,7 +53,7 @@ class ErrorInfo(Structure):
 
 getLastErrorInfo = _lib.solClient_getLastErrorInfo
 getLastErrorInfo.argtypes = []
-getLastErrorInfo.restype = POINTER(ErrorInfo)
+getLastErrorInfo.restype  = POINTER(ErrorInfo)
 
 class SubscribeFlags:
     LOCAL_DISPATCH_ONLY = 0x08
@@ -191,9 +191,10 @@ class _MetaProperties(type):
                 cls._rdict[v] = k
 
 class _Properties(metaclass=_MetaProperties):
-    def __init__(self, *args, **kwargs):
-        for k, v in args:
-            setattr(self, k, v)
+    def __init__(self, iterable=None, **kwargs):
+        if iterable:
+            for k, v in iterable:
+                setattr(self, k, v)
         for k, v in kwargs.items():
             setattr(self, k, v)
 
@@ -218,22 +219,23 @@ class _Properties(metaclass=_MetaProperties):
         return props
 
     @classmethod
-    def iterCPropsArray(cls, rdict, props):
+    def _iterProps(cls, p):
+        for idx in range(0, len(p)-1, 2):
+            yield (cls._rdict[p[idx].decode()], p[idx+1].decode())
+
+    def loadCPropsArray(self, props):
         # one-liner magic is actually slower, verified with timeit!
         #
         #return cls( zip_longest(
         #    *([ iter( map(lambda b: b.decode(), props[:-1])) ] * 2)))
+        for k, v in self._iterProps(props):
+            setattr(self, k, v)
 
-        def iterProps(p):
-            for idx in range(0, len(p)-1, 2):
-                yield (rdict[p[idx].decode()], p[idx+1].decode())
-
-        return iterProps(props)
 
 class ContextProperties(_Properties):
-    def __init__(self, *args, **kw):
+    def __init__(self, args=None, **kw):
         if args or kw:
-            super().__init__(*args, **kw)
+            super().__init__(args, **kw)
         else:
             propLen = 1
             lastProp = 1
@@ -242,7 +244,8 @@ class ContextProperties(_Properties):
                 props = props_t.in_dll(_lib, '_solClient_contextPropsDefaultWithCreateThread')
                 lastProp = props[-1]
                 propLen += 2
-            super().__init__(*super().iterCPropsArray(self._rdict, props))
+            super().__init__()
+            self.loadCPropsArray(props)
 
     # context property defines
     TIME_RES_MS = "CONTEXT_TIME_RES_MS"
@@ -504,6 +507,11 @@ class EndpointProperties(_Properties):
     DEFAULT_ID = TE 
     DEFAULT_DURABLE = PROP_ENABLE_VAL 
     DEFAULT_RESPECTS_MSG_TTL = PROP_DISABLE_VAL 
+    PERM_NONE = "n"
+    PERM_READ_ONLY = "r"
+    PERM_CONSUME = "c"
+    PERM_MODIFY_TOPIC = "m"
+    PERM_DELETE = "d"
 
 class CacheSessionProperties(_Properties):
     CACHE_NAME = "CACHESESSION_CACHE_NAME" 
@@ -637,15 +645,62 @@ class SessionFuncInfo(Structure):
                 ('eventInfo', _Event_Callback),
                 ('rxMsgInfo', _Msg_Callback) ]
 
+    def setMsgCallback(self, cb, user_p=None):
+        self.rxMsgInfo.callback_p = MSG_CALLBACK_TYPE(cb)
+        self.rxMsgInfo.user_p = user_p
+
+    def setEventCallback(self, cb, user_p=None):
+        self.eventMsgInfo.callback_p = EVENT_CALLBACK_TYPE(cb)
+        self.eventMsgInfo.user_p = user_p
+
 #############
 # Flow
 #############
+"""
+Same as SessionFuncInfo
+"""
+class FlowFuncInfo(Structure):
+    class _Msg_Callback(Structure):
+        _fields_ = [ ('callback_p', MSG_CALLBACK_TYPE), ('user_p', c_void_p) ]
+    
+    class _Event_Callback(Structure):
+        _fields_ = [ ('callback_p', EVENT_CALLBACK_TYPE), ('user_p', c_void_p) ]
+
+    _fields_ = [ \
+                ('rxInfo', (c_void_p * 2)),
+                ('eventInfo', _Event_Callback),
+                ('rxMsgInfo', _Msg_Callback) ]
+
+    def setMsgCallback(self, cb, user_p=None):
+        self.rxMsgInfo.callback_p = MSG_CALLBACK_TYPE(cb)
+        self.rxMsgInfo.user_p = user_p
+
+    def setEventCallback(self, cb, user_p=None):
+        self.eventMsgInfo.callback_p = EVENT_CALLBACK_TYPE(cb)
+        self.eventMsgInfo.user_p = user_p
+
 class Flow:
     pass
 
 #############
 # Session
 #############
+
+class _SessionErrCheck:
+    @staticmethod
+    def allowReturnCodes(codes):
+        def errcheck(rc, f, args):
+            if not rc in codes:
+                raise SolaceError(rc, '{}(), args={}'.format(f.__name__, repr(args)))
+
+            return rc
+        return errcheck
+    
+    @staticmethod
+    def raiseNotOK(rc, f, args):
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, '{}(), args={}'.format(f.__name__, repr(args)))
+        return rc
 
 class Session:
     PEER_PLATFORM = "SESSION_PEER_PLATFORM"
@@ -704,6 +759,22 @@ class Session:
 
     def topicSubscribeDispatch(self, topic, flags, dispatchFunc, user):
         pass
+
+    _epProvision = _lib.solClient_session_endpointProvision
+    _epProvision.argtypes = [ POINTER(c_char_p), c_void_p, c_int, c_void_p, c_char_p, c_size_t ]
+    _epProvision.restype  = c_int
+    _epProvision.errcheck = _SessionErrCheck.allowReturnCodes((ReturnCode.OK, ReturnCode.IN_PROGRESS, ReturnCode.WOULD_BLOCK))
+    def epProvision(self, epprops, flags = ProvisionFlags.WAITFORCONFIRM, corrTag = None):
+        return self._epProvision(epprops.toCPropsArray(), self._pt, flags, corrTag, None, 0)
+
+    _createFlow = _lib.solClient_session_createFlow
+    _createFlow.argtypes = [ POINTER(c_char_p), c_void_p, c_void_p, POINTER(FlowFuncInfo), c_size_t ]
+    _createFlow.restype  = c_int
+    _createFlow.errcheck = _SessionErrCheck.allowReturnCodes((ReturnCode.OK, ReturnCode.IN_PROGRESS))
+    def createFlow(self, fprops, funcInfo):
+        f = Flow()
+        self._createFlow(fprops.toCPropsArray(), self._pt, byref(f._pt), pointer(funcInfo), sizeof(funcInfo))
+        return f
 
     def __del__(self):
         rc = _lib.solClient_session_destroy(byref(self._pt))

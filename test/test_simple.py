@@ -24,11 +24,11 @@ def test_destination_eq():
 def test_connect_non_blocking():
     context = Context()
 
-    sprops = SessionProperties()
-    sprops[ SessionProperties.HOST ] = 'localhost'
-    sprops[ SessionProperties.VPN_NAME ] = 'default'
-    sprops[ SessionProperties.USERNAME ] = 'default'
-    sprops[ SessionProperties.CONNECT_BLOCKING ] = PROP_DISABLE_VAL
+    sprops = SessionProperties(\
+            HOST='localhost',
+            VPN_NAME='default',
+            USERNAME='default',
+            CONNECT_BLOCKING=PROP_DISABLE_VAL)
 
     session = Session(context, sprops)
     
@@ -44,10 +44,10 @@ class TestDirectMessages:
         del cls.context
 
     def setup(self):
-        self.sprops = SessionProperties()
-        self.sprops[ SessionProperties.HOST ] = 'localhost'
-        self.sprops[ SessionProperties.VPN_NAME ] = 'default'
-        self.sprops[ SessionProperties.USERNAME ] = 'default'
+        self.sprops = SessionProperties(\
+                HOST='localhost',
+                VPN_NAME='default',
+                USERNAME='default')
 
 
     class SeqNumData:
@@ -59,7 +59,7 @@ class TestDirectMessages:
             self.received = 0
 
     def test_sequence_numbers(self):
-        self.sprops[ SessionProperties.GENERATE_SEQUENCE_NUMBER ] = PROP_ENABLE_VAL
+        self.sprops.GENERATE_SEQUENCE_NUMBER = PROP_ENABLE_VAL
         topic = 'nosetest/direct/test_seq_num'
         messages = 10000
         wait_timeout = 10
