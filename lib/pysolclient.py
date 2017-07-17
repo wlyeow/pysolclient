@@ -90,9 +90,19 @@ class ReturnCode:
         return cls._toString(event).decode()
 
     @staticmethod
+    def raiseExcept(codes):
+        def errcheck(rc, f, args):
+            if not rc in codes:
+                raise SolaceError(rc, '{}(), args={}'.format(f.__name__, repr(args)))
+
+            return rc
+        return errcheck
+    
+    @staticmethod
     def raiseNotOK(rc, f, args):
         if rc != ReturnCode.OK:
-            raise SolaceError(rc, f.__name__)
+            raise SolaceError(rc, '{}(), args={}'.format(f.__name__, repr(args)))
+        return rc
     
 class SubCode:
     # ENUM subcodes 1
@@ -171,7 +181,6 @@ def printLastError(rc, errorStr):
                 info_p.contents.errorStr.decode()) )
 
     _lib.solClient_resetLastErrorInfo()
-
 
 ############
 # Properties
@@ -680,27 +689,49 @@ class FlowFuncInfo(Structure):
         self.eventMsgInfo.user_p = user_p
 
 class Flow:
-    pass
+
+    _create = _lib.solClient_session_createFlow
+    _create.argtypes = [ POINTER(c_char_p), c_void_p, c_void_p, POINTER(FlowFuncInfo), c_size_t ]
+    _create.restype  = c_int
+    _create.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.IN_PROGRESS))
+    def __init__(self, session, fprops, funcInfo = None):
+        if funcInfo is None:
+            funcInfo = FlowFuncInfo()
+            funcInfo.setMsgCallback(_defaultMsgCallback)
+            funcInfo.setEventCallback(_defaultEventCallback)
+
+        self._pt = c_void_p()
+        self.session = session
+        self.funcInfo = funcInfo
+        self._create(fprops.toCPropsArray(), session._pt, byref(self._pt), pointer(funcInfo), sizeof(funcInfo))
+
+    _start = _lib.solClient_flow_start
+    _start.argtypes = [ c_void_p ]
+    _start.restype  = c_int
+    _start.errcheck = ReturnCode.raiseNotOK
+    def start(self):
+        return self._start(self._pt)
+    
+    _stop = _lib.solClient_flow_stop
+    _stop.argtypes = [ c_void_p ]
+    _stop.restype  = c_int
+    _stop.errcheck = ReturnCode.raiseNotOK
+    def stop(self):
+        return self._stop(self._pt)
+
+    _destroy = _lib.solClient_flow_destroy
+    _destroy.argtypes = [ c_void_p ]
+    _destroy.restype  = ReturnCode.raiseNotOK
+    def __del__(self):
+        try:
+            self._destroy(self._pt)
+        except SolaceError as e:
+            LOG.log( LOG.ERROR, str(e) )
+            _lib.solClient_resetLastErrorInfo()
 
 #############
 # Session
 #############
-
-class _SessionErrCheck:
-    @staticmethod
-    def allowReturnCodes(codes):
-        def errcheck(rc, f, args):
-            if not rc in codes:
-                raise SolaceError(rc, '{}(), args={}'.format(f.__name__, repr(args)))
-
-            return rc
-        return errcheck
-    
-    @staticmethod
-    def raiseNotOK(rc, f, args):
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, '{}(), args={}'.format(f.__name__, repr(args)))
-        return rc
 
 class Session:
     PEER_PLATFORM = "SESSION_PEER_PLATFORM"
@@ -710,6 +741,10 @@ class Session:
     PEER_SOFTWARE_DATE = "SESSION_PEER_SOFTWARE_DATE"
     PEER_SOFTWARE_VERSION = "SESSION_PEER_SOFTWARE_VERSION"
 
+    _create = _lib.solClient_session_create
+    _create.argtypes = [ POINTER(c_char_p), c_void_p, c_void_p, POINTER(SessionFuncInfo), c_size_t ]
+    _create.restype  = c_int
+    _create.errcheck = ReturnCode.raiseNotOK
     def __init__(self, context, props, funcInfo = None):
         if funcInfo is None:
             funcInfo = SessionFuncInfo()
@@ -719,43 +754,44 @@ class Session:
         self._pt = c_void_p()
         self.context = context
         self.funcInfo = funcInfo
-        self.props = props
 
-        rc = _lib.solClient_session_create ( self.props.toCPropsArray(), context._pt, byref(self._pt),
+        self._create(props.toCPropsArray(), context._pt, byref(self._pt),
                 pointer(self.funcInfo), sizeof(funcInfo))
 
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "session.create")
-
+    _connect = _lib.solClient_session_connect
+    _connect.argtypes = [ c_void_p ]
+    _connect.restype  = c_int
+    _connect.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.IN_PROGRESS))
     def connect(self):
-        rc = _lib.solClient_session_connect(self._pt)
+        return self._connect(self._pt)
 
-        # no thorough checks on blocking or not
-        if rc != ReturnCode.OK and rc != ReturnCode.IN_PROGRESS:
-            raise SolaceError(rc, "session.connect")
-        return rc
-
+    _disconnect = _lib.solClient_session_disconnect
+    _disconnect.argtypes = [ c_void_p ]
+    _disconnect.restype  = c_int
+    _disconnect.errcheck = ReturnCode.raiseNotOK
     def disconnect(self):
-        rc = _lib.solClient_session_disconnect(self._pt)
-        
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, "session.disconnect")
+        return self._disconnect(self._pt)
 
+    _sendMsg = _lib.solClient_session_sendMsg
+    _sendMsg.argtypes = [ c_void_p, c_void_p ]
+    _sendMsg.restype  = c_int
+    _sendMsg.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.WOULD_BLOCK))
     def sendMsg(self, msg):
-        rc = _lib.solClient_session_sendMsg(self._pt, msg._pt)
-
-        if rc != ReturnCode.OK and rc != ReturnCode.WOULD_BLOCK:
-            raise SolaceError(rc, "session.sendMsg")
-        return rc
+        return self._sendMsg(self._pt, msg._pt)
     
+    _topicSub = _lib.solClient_session_topicSubscribe
+    _topicSub.argtypes = [ c_void_p, c_char_p ]
+    _topicSub.restype  = c_int
+    _topicSub.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.WOULD_BLOCK, ReturnCode.IN_PROGRESS))
+    _topicSubExt = _lib.solClient_session_topicSubscribeExt
+    _topicSubExt.argtypes = [ c_void_p, c_uint32, c_char_p ]
+    _topicSubExt.restype  = c_int
+    _topicSubExt.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.WOULD_BLOCK, ReturnCode.IN_PROGRESS))
     def topicSubscribe(self, topic, flags = None):
         if flags is not None:
-            rc = _lib.solClient_session_topicSubscribe(self._pt, topic.encode())
+            return self._topicSubExt(self._pt, flags, topic.encode())
         else:
-            rc = _lib.solClient_session_topicSubscribeExt(self._pt, flags, topic.encode())
-
-        if rc != ReturnCode.OK and rc != ReturnCode.WOULD_BLOCK and rc != ReturnCode.IN_PROGRESS:
-            raise SolaceError(rc, "session.topicSubscribe")
+            return self._topicSub(self._pt, topic.encode())
 
     def topicSubscribeDispatch(self, topic, flags, dispatchFunc, user):
         pass
@@ -763,24 +799,20 @@ class Session:
     _epProvision = _lib.solClient_session_endpointProvision
     _epProvision.argtypes = [ POINTER(c_char_p), c_void_p, c_int, c_void_p, c_char_p, c_size_t ]
     _epProvision.restype  = c_int
-    _epProvision.errcheck = _SessionErrCheck.allowReturnCodes((ReturnCode.OK, ReturnCode.IN_PROGRESS, ReturnCode.WOULD_BLOCK))
+    _epProvision.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.IN_PROGRESS, ReturnCode.WOULD_BLOCK))
     def epProvision(self, epprops, flags = ProvisionFlags.WAITFORCONFIRM, corrTag = None):
         return self._epProvision(epprops.toCPropsArray(), self._pt, flags, corrTag, None, 0)
 
-    _createFlow = _lib.solClient_session_createFlow
-    _createFlow.argtypes = [ POINTER(c_char_p), c_void_p, c_void_p, POINTER(FlowFuncInfo), c_size_t ]
-    _createFlow.restype  = c_int
-    _createFlow.errcheck = _SessionErrCheck.allowReturnCodes((ReturnCode.OK, ReturnCode.IN_PROGRESS))
-    def createFlow(self, fprops, funcInfo):
-        f = Flow()
-        self._createFlow(fprops.toCPropsArray(), self._pt, byref(f._pt), pointer(funcInfo), sizeof(funcInfo))
-        return f
-
+    _destroy = _lib.solClient_session_destroy
+    _destroy.argtypes = [ c_void_p ]
+    _destroy.restype  = c_int
+    _destroy.errcheck = ReturnCode.raiseNotOK
     def __del__(self):
-        rc = _lib.solClient_session_destroy(byref(self._pt))
-
-        if rc != ReturnCode.OK:
-            printLastError(rc, "session.destroy")
+        try:
+            self._destroy(byref(self._pt))
+        except SolaceError as e:
+            LOG.log( LOG.ERROR, str(e) )
+            _lib.solClient_resetLastErrorInfo()
 
 class TransactedSession:
     MAX_SESSION_NAME_LENGTH = 64
@@ -1060,11 +1092,16 @@ class Message:
         return self._isReplyMsg(self._pt)
 
 
+    _free = _lib.solClient_msg_free
+    _free.argtypes = [ c_void_p ]
+    _free.restype  = c_int
+    _free.errcheck = ReturnCode.raiseNotOK
     def __del__(self):
-        rc = _lib.solClient_msg_free(byref(self._pt))
-
-        if rc != ReturnCode.OK:
-            printLastError(rc, "msg.free")
+        try:
+            self._free(byref(self._pt))
+        except SolaceError as e:
+            LOG.log( LOG.ERROR, str(e) )
+            _lib.solClient_resetLastErrorInfo()
 
 # init, set to error
 _lib.solClient_initialize( LOG.ERROR, c_void_p() )
