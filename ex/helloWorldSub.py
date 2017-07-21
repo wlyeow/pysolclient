@@ -27,8 +27,8 @@ def rxMsgCallback( session_p, msg_p, user_p ):
     return CALLBACK_OK
 
 funcInfo = SessionFuncInfo()
-funcInfo.rxMsgInfo.callback_p = MSG_CALLBACK_TYPE(rxMsgCallback)
-funcInfo.eventInfo.callback_p = EVENT_CALLBACK_TYPE(_defaultEventCallback)
+funcInfo.setMsgCallback(rxMsgCallback)
+funcInfo.setEventCallback(_defaultEventCallback)
 
 session = Session(context, sprops, funcInfo)
 session.connect()

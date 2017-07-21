@@ -636,13 +636,15 @@ def _defaultEventCallback( session_p, eventInfo_p, user_p ):
         LOG.log(LOG.ERROR,
                 '_defaultEventCallback - {}; Unrecognized or deprecated event.\n'.format(
                     SessionEvent.toString(event)))
-    
 
 ###############
 # SessionInfo
 ###############
 
 class SessionFuncInfo(Structure):
+    class _Rx_Info(Structure):
+        _fields_ = [ ('callback_p', c_void_p), ('user_p', c_void_p) ]
+
     class _Msg_Callback(Structure):
         _fields_ = [ ('callback_p', MSG_CALLBACK_TYPE), ('user_p', c_void_p) ]
     
@@ -650,7 +652,7 @@ class SessionFuncInfo(Structure):
         _fields_ = [ ('callback_p', EVENT_CALLBACK_TYPE), ('user_p', c_void_p) ]
 
     _fields_ = [ \
-                ('rxInfo', (c_void_p * 2)),
+                ('rxInfo', _Rx_Info),
                 ('eventInfo', _Event_Callback),
                 ('rxMsgInfo', _Msg_Callback) ]
 
@@ -659,8 +661,9 @@ class SessionFuncInfo(Structure):
         self.rxMsgInfo.user_p = user_p
 
     def setEventCallback(self, cb, user_p=None):
-        self.eventMsgInfo.callback_p = EVENT_CALLBACK_TYPE(cb)
-        self.eventMsgInfo.user_p = user_p
+        self.eventInfo.callback_p = EVENT_CALLBACK_TYPE(cb)
+        self.eventInfo.user_p = user_p
+
 
 #############
 # Flow
@@ -669,6 +672,9 @@ class SessionFuncInfo(Structure):
 Same as SessionFuncInfo
 """
 class FlowFuncInfo(Structure):
+    class _Rx_Info(Structure):
+        _fields_ = [ ('callback_p', c_void_p), ('user_p', c_void_p) ]
+
     class _Msg_Callback(Structure):
         _fields_ = [ ('callback_p', MSG_CALLBACK_TYPE), ('user_p', c_void_p) ]
     
@@ -676,7 +682,7 @@ class FlowFuncInfo(Structure):
         _fields_ = [ ('callback_p', EVENT_CALLBACK_TYPE), ('user_p', c_void_p) ]
 
     _fields_ = [ \
-                ('rxInfo', (c_void_p * 2)),
+                ('rxInfo', _Rx_Info),
                 ('eventInfo', _Event_Callback),
                 ('rxMsgInfo', _Msg_Callback) ]
 
@@ -685,8 +691,8 @@ class FlowFuncInfo(Structure):
         self.rxMsgInfo.user_p = user_p
 
     def setEventCallback(self, cb, user_p=None):
-        self.eventMsgInfo.callback_p = EVENT_CALLBACK_TYPE(cb)
-        self.eventMsgInfo.user_p = user_p
+        self.eventInfo.callback_p = EVENT_CALLBACK_TYPE(cb)
+        self.eventInfo.user_p = user_p
 
 class Flow:
 
@@ -699,7 +705,6 @@ class Flow:
             funcInfo = FlowFuncInfo()
             funcInfo.setMsgCallback(_defaultMsgCallback)
             funcInfo.setEventCallback(_defaultEventCallback)
-
         self._pt = c_void_p()
         self.session = session
         self.funcInfo = funcInfo
@@ -721,10 +726,11 @@ class Flow:
 
     _destroy = _lib.solClient_flow_destroy
     _destroy.argtypes = [ c_void_p ]
-    _destroy.restype  = ReturnCode.raiseNotOK
+    _destroy.restype  = c_int
+    _destroy.errcheck = ReturnCode.raiseNotOK
     def __del__(self):
         try:
-            self._destroy(self._pt)
+            self._destroy(byref(self._pt))
         except SolaceError as e:
             LOG.log( LOG.ERROR, str(e) )
             _lib.solClient_resetLastErrorInfo()
@@ -748,8 +754,8 @@ class Session:
     def __init__(self, context, props, funcInfo = None):
         if funcInfo is None:
             funcInfo = SessionFuncInfo()
-            funcInfo.rxMsgInfo.callback_p = MSG_CALLBACK_TYPE(_defaultMsgCallback)
-            funcInfo.eventInfo.callback_p = EVENT_CALLBACK_TYPE(_defaultEventCallback)
+            funcInfo.setMsgCallback(_defaultMsgCallback)
+            funcInfo.setEventCallback(_defaultEventCallback)
 
         self._pt = c_void_p()
         self.context = context
