@@ -658,11 +658,11 @@ class SessionFuncInfo(Structure):
 
     def setMsgCallback(self, cb, user_p=None):
         self.rxMsgInfo.callback_p = MSG_CALLBACK_TYPE(cb)
-        self.rxMsgInfo.user_p = user_p
+        self.rxMsgInfo.user_p = cast(user_p, c_void_p)
 
     def setEventCallback(self, cb, user_p=None):
         self.eventInfo.callback_p = EVENT_CALLBACK_TYPE(cb)
-        self.eventInfo.user_p = user_p
+        self.eventInfo.user_p = cast(user_p, c_void_p)
 
 
 #############
@@ -688,11 +688,11 @@ class FlowFuncInfo(Structure):
 
     def setMsgCallback(self, cb, user_p=None):
         self.rxMsgInfo.callback_p = MSG_CALLBACK_TYPE(cb)
-        self.rxMsgInfo.user_p = user_p
+        self.rxMsgInfo.user_p = cast(user_p, c_void_p)
 
     def setEventCallback(self, cb, user_p=None):
         self.eventInfo.callback_p = EVENT_CALLBACK_TYPE(cb)
-        self.eventInfo.user_p = user_p
+        self.eventInfo.user_p = cast(user_p, c_void_p)
 
 class Flow:
 
