@@ -584,8 +584,8 @@ class Context:
 
 MSG_CALLBACK_TYPE = CFUNCTYPE(c_int, c_void_p, c_void_p, c_void_p)
 
-def msgDumpToConsole( msg_p ):
-    _lib.solClient_msg_dump( msg_p, c_void_p(), 0 )
+def msgDumpToConsole(msg_p):
+    Message.dump(msg_p)
 
 def _defaultMsgCallback( session_p, msg_p, user_p ):
     msgDumpToConsole(msg_p)
@@ -697,7 +697,7 @@ class FlowFuncInfo(Structure):
 class Flow:
 
     _create = _lib.solClient_session_createFlow
-    _create.argtypes = [ POINTER(c_char_p), c_void_p, c_void_p, POINTER(FlowFuncInfo), c_size_t ]
+    _create.argtypes = [POINTER(c_char_p), c_void_p, c_void_p, POINTER(FlowFuncInfo), c_size_t]
     _create.restype  = c_int
     _create.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.IN_PROGRESS))
     def __init__(self, session, fprops, funcInfo = None):
@@ -711,21 +711,32 @@ class Flow:
         self._create(fprops.toCPropsArray(), session._pt, byref(self._pt), pointer(funcInfo), sizeof(funcInfo))
 
     _start = _lib.solClient_flow_start
-    _start.argtypes = [ c_void_p ]
+    _start.argtypes = [c_void_p]
     _start.restype  = c_int
     _start.errcheck = ReturnCode.raiseNotOK
     def start(self):
         return self._start(self._pt)
     
     _stop = _lib.solClient_flow_stop
-    _stop.argtypes = [ c_void_p ]
+    _stop.argtypes = [c_void_p]
     _stop.restype  = c_int
     _stop.errcheck = ReturnCode.raiseNotOK
     def stop(self):
         return self._stop(self._pt)
 
+    _ack = _lib.solClient_flow_sendAck
+    _ack.argtypes = [c_void_p, c_uint64]
+    _ack.restype  = c_int
+    _ack.errcheck = ReturnCode.raiseNotOK
+    def ack(self, msgId):
+        _ack(self._pt, msgId)
+
+    @classmethod
+    def ack(cls, flow_p, msg_p):
+        cls._ack(flow_p, Message.getMsgId(msg_p))
+
     _destroy = _lib.solClient_flow_destroy
-    _destroy.argtypes = [ c_void_p ]
+    _destroy.argtypes = [c_void_p]
     _destroy.restype  = c_int
     _destroy.errcheck = ReturnCode.raiseNotOK
     def __del__(self):
@@ -748,7 +759,7 @@ class Session:
     PEER_SOFTWARE_VERSION = "SESSION_PEER_SOFTWARE_VERSION"
 
     _create = _lib.solClient_session_create
-    _create.argtypes = [ POINTER(c_char_p), c_void_p, c_void_p, POINTER(SessionFuncInfo), c_size_t ]
+    _create.argtypes = [POINTER(c_char_p), c_void_p, c_void_p, POINTER(SessionFuncInfo), c_size_t]
     _create.restype  = c_int
     _create.errcheck = ReturnCode.raiseNotOK
     def __init__(self, context, props, funcInfo = None):
@@ -765,32 +776,32 @@ class Session:
                 pointer(self.funcInfo), sizeof(funcInfo))
 
     _connect = _lib.solClient_session_connect
-    _connect.argtypes = [ c_void_p ]
+    _connect.argtypes = [c_void_p]
     _connect.restype  = c_int
     _connect.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.IN_PROGRESS))
     def connect(self):
         return self._connect(self._pt)
 
     _disconnect = _lib.solClient_session_disconnect
-    _disconnect.argtypes = [ c_void_p ]
+    _disconnect.argtypes = [c_void_p]
     _disconnect.restype  = c_int
     _disconnect.errcheck = ReturnCode.raiseNotOK
     def disconnect(self):
         return self._disconnect(self._pt)
 
     _sendMsg = _lib.solClient_session_sendMsg
-    _sendMsg.argtypes = [ c_void_p, c_void_p ]
+    _sendMsg.argtypes = [c_void_p, c_void_p]
     _sendMsg.restype  = c_int
     _sendMsg.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.WOULD_BLOCK))
     def sendMsg(self, msg):
         return self._sendMsg(self._pt, msg._pt)
     
     _topicSub = _lib.solClient_session_topicSubscribe
-    _topicSub.argtypes = [ c_void_p, c_char_p ]
+    _topicSub.argtypes = [c_void_p, c_char_p]
     _topicSub.restype  = c_int
     _topicSub.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.WOULD_BLOCK, ReturnCode.IN_PROGRESS))
     _topicSubExt = _lib.solClient_session_topicSubscribeExt
-    _topicSubExt.argtypes = [ c_void_p, c_uint32, c_char_p ]
+    _topicSubExt.argtypes = [c_void_p, c_uint32, c_char_p]
     _topicSubExt.restype  = c_int
     _topicSubExt.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.WOULD_BLOCK, ReturnCode.IN_PROGRESS))
     def topicSubscribe(self, topic, flags = None):
@@ -803,14 +814,14 @@ class Session:
         pass
 
     _epProvision = _lib.solClient_session_endpointProvision
-    _epProvision.argtypes = [ POINTER(c_char_p), c_void_p, c_int, c_void_p, c_char_p, c_size_t ]
+    _epProvision.argtypes = [POINTER(c_char_p), c_void_p, c_int, c_void_p, c_char_p, c_size_t]
     _epProvision.restype  = c_int
     _epProvision.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.IN_PROGRESS, ReturnCode.WOULD_BLOCK))
     def epProvision(self, epprops, flags = ProvisionFlags.WAITFORCONFIRM, corrTag = None):
         return self._epProvision(epprops.toCPropsArray(), self._pt, flags, corrTag, None, 0)
 
     _destroy = _lib.solClient_session_destroy
-    _destroy.argtypes = [ c_void_p ]
+    _destroy.argtypes = [c_void_p]
     _destroy.restype  = c_int
     _destroy.errcheck = ReturnCode.raiseNotOK
     def __del__(self):
@@ -1041,6 +1052,10 @@ class Message:
     def getMsgId(self):
         return self._getMsgId(self._pt, byref(c_uint64())).value
 
+    @classmethod
+    def getMsgId(cls, msg_p):
+        return cls._getMsgId(msg_p, byref(c_uint64()))
+
     _getSeqNum = _lib.solClient_msg_getSequenceNumber
     _getSeqNum.argtypes = [c_void_p, POINTER(c_int64)]
     _getSeqNum.restype  = c_int
@@ -1097,6 +1112,16 @@ class Message:
     def isReplyMsg(self):
         return self._isReplyMsg(self._pt)
 
+    _dump = _lib.solClient_msg_dump
+    _dump.argtypes = [c_void_p, c_void_p, c_size_t]
+    _dump.restype  = c_int
+    _dump.errcheck = ReturnCode.raiseNotOK
+    def dump(self, buffer=None):
+        self._dump(self._pt, buffer, 0 if buffer is None else len(buffer))
+
+    @classmethod
+    def dump(cls, msg_p, buffer=None):
+        cls._dump(msg_p, buffer, 0 if buffer is None else len(buffer))
 
     _free = _lib.solClient_msg_free
     _free.argtypes = [ c_void_p ]

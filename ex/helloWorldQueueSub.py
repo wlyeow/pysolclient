@@ -13,7 +13,7 @@ def main():
     session.connect()
     
     epprops = EndpointProperties(ID=EndpointProperties.QUEUE, \
-            NAME=sys.argv[4], PERMISSION=EndpointProperties.PERM_DELETE)
+            NAME=sys.argv[4], PERMISSION=EndpointProperties.PERM_CONSUME)
     
     print('Provisioning endpoint {}.'.format(sys.argv[4]))
     session.epProvision(epprops, ProvisionFlags.IGNORE_EXIST_ERRORS | ProvisionFlags.WAITFORCONFIRM)
@@ -23,11 +23,14 @@ def main():
                     ACKMODE=FlowProperties.ACKMODE_CLIENT, BIND_NAME=sys.argv[4])
     
     rxMsg = c_int(0)
-    def rxFlowMsgCallback( session_p, msg_p, user_p ):
+    def rxFlowMsgCallback( flow_p, msg_p, user_p ):
         cast(user_p, POINTER(c_int)).contents.value += 1
         print('Message received from flow.')
-        #TODO: ack the msg
-        return _defaultMsgCallback(session_p, msg_p, None)
+
+        _defaultMsgCallback(None, msg_p, None)
+        Flow.ack(flow_p, msg_p)
+
+        return CALLBACK_OK
     
     funcInfo = FlowFuncInfo()
     funcInfo.setMsgCallback(rxFlowMsgCallback, byref(rxMsg))
@@ -39,7 +42,7 @@ def main():
     while rxMsg.value < 1:
         time.sleep(1)
     
-    #TODO: close flow
+    del flow
     session.disconnect()
 
 if __name__ == '__main__':
