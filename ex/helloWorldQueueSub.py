@@ -28,7 +28,7 @@ def main():
         print('Message received from flow.')
 
         _defaultMsgCallback(None, msg_p, None)
-        Flow.ack(flow_p, msg_p)
+        Flow.ackPtr(flow_p, msg_p)
 
         return CALLBACK_OK
     

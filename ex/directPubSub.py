@@ -9,7 +9,7 @@ import time
 
 def main_run():
     #setup
-    conf = common.init('t')
+    conf = common.init((True, *'t'))
     
     context = Context()
     sprops = SessionProperties(HOST=conf.host, VPN_NAME=conf.user.vpn, USERNAME=conf.user.name)

@@ -585,7 +585,7 @@ class Context:
 MSG_CALLBACK_TYPE = CFUNCTYPE(c_int, c_void_p, c_void_p, c_void_p)
 
 def msgDumpToConsole(msg_p):
-    Message.dump(msg_p)
+    Message.dumpPtr(msg_p)
 
 def _defaultMsgCallback( session_p, msg_p, user_p ):
     msgDumpToConsole(msg_p)
@@ -732,8 +732,8 @@ class Flow:
         _ack(self._pt, msgId)
 
     @classmethod
-    def ack(cls, flow_p, msg_p):
-        cls._ack(flow_p, Message.getMsgId(msg_p))
+    def ackPtr(cls, flow_p, msg_p):
+        cls._ack(flow_p, Message.getMsgPtrId(msg_p))
 
     _destroy = _lib.solClient_flow_destroy
     _destroy.argtypes = [c_void_p]
@@ -867,7 +867,7 @@ class _MessageAttribute:
         if rc != ReturnCode.OK:
             raise SolaceError(rc, f.__name__)
 
-        return args[1]._obj
+        return args[1]._obj.value
 
     @staticmethod
     def returnRefCharArrayAsBytes(rc, f, args):
@@ -926,6 +926,14 @@ class Message:
     _setCorrId.errcheck = ReturnCode.raiseNotOK
     def setCorrId(self, corrId):
         self._setCorrId(self._pt, _toBytes(corrId))
+
+    _setCorrTagPtr = _lib.solClient_msg_setCorrelationTagPtr
+    _setCorrTagPtr.argtypes = [c_void_p, c_void_p, c_size_t]
+    _setCorrTagPtr.restype  = c_int
+    _setCorrTagPtr.errcheck = ReturnCode.raiseNotOK
+    def setCorrTag(self, corrTag):
+        self.corrTag = py_object(corrTag)
+        self._setCorrTagPtr(self._pt, byref(self.corrTag), sizeof(self.corrTag))
 
     _setDTO = _lib.solClient_msg_setDeliverToOne
     _setDTO.argtypes = [c_void_p, c_ubyte]
@@ -1015,7 +1023,7 @@ class Message:
     _getAppMsgId.restype  = c_int
     _getAppMsgId.errcheck = _MessageAttribute.returnRefParam1
     def getAppMsgId(self):
-        return self._getAppMsgId(self._pt, byref(c_char_p())).value.decode()
+        return self._getAppMsgId(self._pt, byref(c_char_p())).decode()
 
     _getBinaryAttachment = _lib.solClient_msg_getBinaryAttachmentPtr
     _getBinaryAttachment.argtypes = [c_void_p, c_void_p, POINTER(c_uint32)]
@@ -1029,14 +1037,14 @@ class Message:
     _getCacheStatus.restype  = c_int
     _getCacheStatus.errcheck = _MessageAttribute.returnRefParam1
     def getCacheStatus(self):
-        return self._getCacheStatus(self._pt).value
+        return self._getCacheStatus(self._pt)
 
     _getCOS = _lib.solClient_msg_getClassOfService
     _getCOS.argtypes = [c_void_p, POINTER(c_uint32)]
     _getCOS.restype  = c_int
     _getCOS.errcheck = _MessageAttribute.returnRefParam1
     def getCOS(self):
-        return self._getCOS(self._pt, byref(c_uint32())).value
+        return self._getCOS(self._pt, byref(c_uint32()))
 
     _getDest = _lib.solClient_msg_getDestination
     _getDest.argtypes = [c_void_p, POINTER(Destination), c_size_t]
@@ -1050,10 +1058,10 @@ class Message:
     _getMsgId.restype  = c_int
     _getMsgId.errcheck = _MessageAttribute.returnRefParam1
     def getMsgId(self):
-        return self._getMsgId(self._pt, byref(c_uint64())).value
+        return self._getMsgId(self._pt, byref(c_uint64()))
 
     @classmethod
-    def getMsgId(cls, msg_p):
+    def getMsgPtrId(cls, msg_p):
         return cls._getMsgId(msg_p, byref(c_uint64()))
 
     _getSeqNum = _lib.solClient_msg_getSequenceNumber
@@ -1061,14 +1069,14 @@ class Message:
     _getSeqNum.restype  = c_int
     _getSeqNum.errcheck = _MessageAttribute.returnRefParam1
     def getSeqNum(self):
-        return self._getSeqNum(self._pt, byref(c_int64())).value
+        return self._getSeqNum(self._pt, byref(c_int64()))
 
     _getTTL = _lib.solClient_msg_getTimeToLive
     _getTTL.argtypes = [c_void_p, POINTER(c_int64)]
     _getTTL.restype  = c_int
     _getTTL.errcheck = _MessageAttribute.returnRefParam1
     def getTTL(self):
-        return self._getTTL(self._pt, byref(c_int64())).value
+        return self._getTTL(self._pt, byref(c_int64()))
 
     _isDiscardIndicated = _lib.solClient_msg_isDiscardIndication
     _isDiscardIndicated.argtypes = [c_void_p]
@@ -1120,7 +1128,7 @@ class Message:
         self._dump(self._pt, buffer, 0 if buffer is None else len(buffer))
 
     @classmethod
-    def dump(cls, msg_p, buffer=None):
+    def dumpPtr(cls, msg_p, buffer=None):
         cls._dump(msg_p, buffer, 0 if buffer is None else len(buffer))
 
     _free = _lib.solClient_msg_free

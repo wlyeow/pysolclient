@@ -7,10 +7,12 @@ class MetaParser(type):
         cls._opts = { \
                 'c' : { 'dest': 'host', 'required': True, 'help': '[{tcp|tcps|ws|wss}://][ ip | host ][:port]' },
                 'u' : { 'dest': 'user', 'default': 'default@default', 'type': cls.User, 'help': '[username][@vpn]' },
+                'p' : { 'dest': 'passwd', 'help': '[passwd]' },
                 'l' : { 'dest': 'log', 'metavar': 'LEVEL', 'help': 'log level' },
-                't' : { 'dest': 'topic', 'default': 'my/sample/topic', 'help': 'smf/topic/name' },
-                'q' : { 'dest': 'queue', 'default': 'my_sample_queue', 'help': 'durable/queue/name' },
-                'e' : { 'dest': 'tpe', 'metavar': 'TOPIC-ENDPOINT', 'default': 'my_sample_topicendpoint', 'help': 'durable/topic/endpoint/name' },
+                't' : { 'dest': 'topic', 'nargs': '?', 'const': 'my/sample/topic', 'help': 'smf/topic/name' },
+                'q' : { 'dest': 'queue', 'nargs': '?', 'const': 'my_sample_queue', 'help': 'durable/queue/name' },
+                'e' : { 'dest': 'tpe', 'metavar': 'TOPIC-ENDPOINT', 'nargs': '?', 'const': 'my_sample_topicendpoint', 'help': 'durable/topic/endpoint/name' },
+                'n' : { 'dest': 'num', 'default': 10, 'type': int, 'help': 'number of messages' },
             }
 
 class Parser(metaclass=MetaParser):
@@ -31,10 +33,18 @@ class Parser(metaclass=MetaParser):
         self.parser = ap.ArgumentParser(conflict_handler='resolve')
         if args is not None: self.add(*args)
 
-    def add(self, *args):
+    def add(self, *args, parser=None):
+        if parser is None:
+            parser = self.parser
         for arg in args:
-            if arg in self._opts:
-                self.parser.add_argument('-'+arg, **(self._opts[arg]))
+            if type(arg) is tuple:
+                g = parser.add_mutually_exclusive_group(required=arg[0])
+                self.add(*arg[1:], parser=g)
+            elif type(arg) is list:
+                g = parser.add_argument_group(title=arg[0])
+                self.add(*arg[1:], parser=g)
+            elif arg in self._opts:
+                parser.add_argument('-'+arg, **(self._opts[arg]))
 
     def hide(self, *args):
         new_parser = ap.ArgumentParser(parents=[self.parser], conflict_handler='resolve')
@@ -46,9 +56,8 @@ class Parser(metaclass=MetaParser):
         args = self.parser.parse_args()
         return args
 
-
-def init(opts):
-    p = Parser(*('cu'+opts+'l'))
+def init(*opts):
+    p = Parser(*(list('cu')+list(opts)+['l']))
     args = p.parse()
 
     if args.log is not None:
