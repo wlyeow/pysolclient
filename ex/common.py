@@ -1,5 +1,6 @@
 import argparse as ap
 import pysolclient as solclient
+from ctypes import *
 
 class MetaParser(type):
     def __init__(cls, name, bases, d):
@@ -80,6 +81,14 @@ def init(*opts):
 
     return args
 
+class CallbackObject:
+    @classmethod
+    def wrap(cls, o):
+        return py_object(o)
+
+    @classmethod
+    def deref(cls, o):
+        return cast(o, POINTER(py_object)).contents.value
 
 if __name__ == "__main__":
     args = init('tqe')

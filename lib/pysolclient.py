@@ -931,8 +931,8 @@ class Message:
     _setCorrTagPtr.argtypes = [c_void_p, c_void_p, c_size_t]
     _setCorrTagPtr.restype  = c_int
     _setCorrTagPtr.errcheck = ReturnCode.raiseNotOK
-    def setCorrTag(self, corrTag):
-        self.corrTag = py_object(corrTag)
+    def setCorrTag(self, tag):
+        self.corrTag = tag
         self._setCorrTagPtr(self._pt, byref(self.corrTag), sizeof(self.corrTag))
 
     _setDTO = _lib.solClient_msg_setDeliverToOne
