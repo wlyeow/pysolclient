@@ -104,6 +104,28 @@ class ReturnCode:
             raise SolaceError(rc, '{}(), args={}'.format(f.__name__, repr(args)))
         return rc
     
+    @staticmethod
+    def returnRefParam1(rc, f, args):
+        if rc == ReturnCode.NOT_FOUND:
+            return None
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, f.__name__)
+
+        return args[1]._obj.value
+
+    @staticmethod
+    def returnRefCharArrayAsBytes(rc, f, args):
+        if rc == ReturnCode.NOT_FOUND:
+            return None
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, f.__name__)
+
+        return cast(args[1]._obj, POINTER(c_char * args[2]._obj.value)).contents.raw
+
+    @staticmethod
+    def returnBool(rc, f, args):
+        return rc != 0
+
 class SubCode:
     # ENUM subcodes 1
     (OK, PARAM_OUT_OF_RANGE, PARAM_NULL_PTR, PARAM_CONFLICT, INSUFFICIENT_SPACE, OUT_OF_RESOURCES, INTERNAL_ERROR, OUT_OF_MEMORY, PROTOCOL_ERROR, INIT_NOT_CALLED, TIMEOUT, KEEP_ALIVE_FAILURE, SESSION_NOT_ESTABLISHED, OS_ERROR, COMMUNICATION_ERROR, USER_DATA_TOO_LARGE, TOPIC_TOO_LARGE, INVALID_TOPIC_SYNTAX, XML_PARSE_ERROR, LOGIN_FAILURE, INVALID_VIRTUAL_ADDRESS, CLIENT_DELETE_IN_PROGRESS, TOO_MANY_CLIENTS, SUBSCRIPTION_ALREADY_PRESENT, SUBSCRIPTION_NOT_FOUND, SUBSCRIPTION_INVALID, SUBSCRIPTION_OTHER, CONTROL_OTHER, DATA_OTHER, LOG_FILE_ERROR, MESSAGE_TOO_LARGE, SUBSCRIPTION_TOO_MANY, INVALID_SESSION_OPERATION, TOPIC_MISSING, ASSURED_MESSAGING_NOT_ESTABLISHED, ASSURED_MESSAGING_STATE_ERROR, QUEUENAME_TOPIC_CONFLICT, QUEUENAME_TOO_LARGE, QUEUENAME_INVALID_MODE, MAX_TOTAL_MSGSIZE_EXCEEDED, DBLOCK_ALREADY_EXISTS, NO_STRUCTURED_DATA, CONTAINER_BUSY, INVALID_DATA_CONVERSION, CANNOT_MODIFY_WHILE_NOT_IDLE, MSG_VPN_NOT_ALLOWED, CLIENT_NAME_INVALID, MSG_VPN_UNAVAILABLE, CLIENT_USERNAME_IS_SHUTDOWN, DYNAMIC_CLIENTS_NOT_ALLOWED, CLIENT_NAME_ALREADY_IN_USE, CACHE_NO_DATA, CACHE_SUSPECT_DATA, CACHE_ERROR_RESPONSE, CACHE_INVALID_SESSION, CACHE_TIMEOUT, CACHE_LIVEDATA_FULFILL, CACHE_ALREADY_IN_PROGRESS, MISSING_REPLY_TO) = range(59)
@@ -782,6 +804,13 @@ class Session:
     def connect(self):
         return self._connect(self._pt)
 
+    _createTempTopic = _lib.solClient_session_createTemporaryTopicName
+    _createTempTopic.argtypes = [c_void_p, c_char_p, c_size_t]
+    _createTempTopic.restype  = c_int
+    _createTempTopic.errcheck = ReturnCode.returnRefCharArrayAsBytes
+    def createTempTopic(self):
+        return
+
     _disconnect = _lib.solClient_session_disconnect
     _disconnect.argtypes = [c_void_p]
     _disconnect.restype  = c_int
@@ -858,29 +887,6 @@ class Destination(Structure):
 
     def setDest(self, d):
         self.dest = _toBytes(d)
-
-class _MessageAttribute:
-    @staticmethod
-    def returnRefParam1(rc, f, args):
-        if rc == ReturnCode.NOT_FOUND:
-            return None
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, f.__name__)
-
-        return args[1]._obj.value
-
-    @staticmethod
-    def returnRefCharArrayAsBytes(rc, f, args):
-        if rc == ReturnCode.NOT_FOUND:
-            return None
-        if rc != ReturnCode.OK:
-            raise SolaceError(rc, f.__name__)
-
-        return cast(args[1]._obj, POINTER(c_char * args[2]._obj.value)).contents.raw
-
-    @staticmethod
-    def returnBool(rc, f, args):
-        return rc != 0
 
 # Message
 class Message:
@@ -1021,42 +1027,42 @@ class Message:
     _getAppMsgId = _lib.solClient_msg_getApplicationMessageId
     _getAppMsgId.argtypes = [c_void_p, POINTER(c_char_p)]
     _getAppMsgId.restype  = c_int
-    _getAppMsgId.errcheck = _MessageAttribute.returnRefParam1
+    _getAppMsgId.errcheck = ReturnCode.returnRefParam1
     def getAppMsgId(self):
         return self._getAppMsgId(self._pt, byref(c_char_p())).decode()
 
     _getBinaryAttachment = _lib.solClient_msg_getBinaryAttachmentPtr
     _getBinaryAttachment.argtypes = [c_void_p, c_void_p, POINTER(c_uint32)]
     _getBinaryAttachment.restype  = c_int
-    _getBinaryAttachment.errcheck = _MessageAttribute.returnRefCharArrayAsBytes
+    _getBinaryAttachment.errcheck = ReturnCode.returnRefCharArrayAsBytes
     def getBinaryAttachment(self):
         return self._getBinaryAttachment(self._pt, byref(c_void_p()), byref(c_uint32()))
 
     _getCacheStatus = _lib.solClient_msg_isCacheMsg
     _getCacheStatus.argtypes = [c_void_p]
     _getCacheStatus.restype  = c_int
-    _getCacheStatus.errcheck = _MessageAttribute.returnRefParam1
+    _getCacheStatus.errcheck = ReturnCode.returnRefParam1
     def getCacheStatus(self):
         return self._getCacheStatus(self._pt)
 
     _getCOS = _lib.solClient_msg_getClassOfService
     _getCOS.argtypes = [c_void_p, POINTER(c_uint32)]
     _getCOS.restype  = c_int
-    _getCOS.errcheck = _MessageAttribute.returnRefParam1
+    _getCOS.errcheck = ReturnCode.returnRefParam1
     def getCOS(self):
         return self._getCOS(self._pt, byref(c_uint32()))
 
     _getDest = _lib.solClient_msg_getDestination
     _getDest.argtypes = [c_void_p, POINTER(Destination), c_size_t]
     _getDest.restype  = c_int
-    _getDest.errcheck = _MessageAttribute.returnRefParam1
+    _getDest.errcheck = ReturnCode.returnRefParam1
     def getDest(self):
         return self._getDest(self._pt, byref(Destination()), sizeof(Destination))
 
     _getMsgId = _lib.solClient_msg_getMsgId
     _getMsgId.argtypes = [c_void_p, POINTER(c_uint64)]
     _getMsgId.restype  = c_int
-    _getMsgId.errcheck = _MessageAttribute.returnRefParam1
+    _getMsgId.errcheck = ReturnCode.returnRefParam1
     def getMsgId(self):
         return self._getMsgId(self._pt, byref(c_uint64()))
 
@@ -1067,56 +1073,56 @@ class Message:
     _getSeqNum = _lib.solClient_msg_getSequenceNumber
     _getSeqNum.argtypes = [c_void_p, POINTER(c_int64)]
     _getSeqNum.restype  = c_int
-    _getSeqNum.errcheck = _MessageAttribute.returnRefParam1
+    _getSeqNum.errcheck = ReturnCode.returnRefParam1
     def getSeqNum(self):
         return self._getSeqNum(self._pt, byref(c_int64()))
 
     _getTTL = _lib.solClient_msg_getTimeToLive
     _getTTL.argtypes = [c_void_p, POINTER(c_int64)]
     _getTTL.restype  = c_int
-    _getTTL.errcheck = _MessageAttribute.returnRefParam1
+    _getTTL.errcheck = ReturnCode.returnRefParam1
     def getTTL(self):
         return self._getTTL(self._pt, byref(c_int64()))
 
     _isDiscardIndicated = _lib.solClient_msg_isDiscardIndication
     _isDiscardIndicated.argtypes = [c_void_p]
     _isDiscardIndicated.restype  = c_ubyte
-    _isDiscardIndicated.errcheck = _MessageAttribute.returnBool
+    _isDiscardIndicated.errcheck = ReturnCode.returnBool
     def isDiscardIndicated(self):
         return self._isDiscardIndicated(self._pt)
 
     _isDTO = _lib.solClient_msg_isDeliverToOne
     _isDTO.argtypes = [c_void_p]
     _isDTO.restype  = c_ubyte
-    _isDTO.errcheck = _MessageAttribute.returnBool
+    _isDTO.errcheck = ReturnCode.returnBool
     def isDTO(self):
         return self._isDTO(self._pt)
 
     _isDMQ = _lib.solClient_msg_isDMQEligible
     _isDMQ.argtypes = [c_void_p]
     _isDMQ.restype  = c_ubyte
-    _isDMQ.errcheck = _MessageAttribute.returnBool
+    _isDMQ.errcheck = ReturnCode.returnBool
     def isDMQ(self):
         return self._isDMQ(self._pt)
 
     _isEliding = _lib.solClient_msg_isElidingEligible
     _isEliding.argtypes = [c_void_p]
     _isEliding.restype  = c_ubyte
-    _isEliding.errcheck = _MessageAttribute.returnBool
+    _isEliding.errcheck = ReturnCode.returnBool
     def isEliding(self):
         return self._isEliding(self._pt)
 
     _isRedelivered = _lib.solClient_msg_isRedelivered
     _isRedelivered.argtypes = [c_void_p]
     _isRedelivered.restype  = c_ubyte
-    _isRedelivered.errcheck = _MessageAttribute.returnBool
+    _isRedelivered.errcheck = ReturnCode.returnBool
     def isRedelivered(self):
         return self._isRedelivered(self._pt)
 
     _isReplyMsg = _lib.solClient_msg_isReplyMsg
     _isReplyMsg.argtypes = [c_void_p]
     _isReplyMsg.restype  = c_ubyte
-    _isReplyMsg.errcheck = _MessageAttribute.returnBool
+    _isReplyMsg.errcheck = ReturnCode.returnBool
     def isReplyMsg(self):
         return self._isReplyMsg(self._pt)
 
