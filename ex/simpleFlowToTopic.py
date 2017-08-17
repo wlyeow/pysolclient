@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from pysolclient import *
+from pysolclient import _defaultMsgCallback
 import common
 import sys
 import time
@@ -21,7 +22,6 @@ def eventCallback(session_p, eventInfo_p, user_p):
                 SessionEvent.toString(event)))
 
         acker = common.CallbackObject.deref(corr_p)
-        print('Acknowledged Seq {}'.format(acker.msg.getSeqNum()))
         # remove circular ref
         del acker.msg
         acker.accepted = True
@@ -78,31 +78,47 @@ def eventCallback(session_p, eventInfo_p, user_p):
                     SessionEvent.toString(event)))
 
 def main_run():
-    conf = common.init('n', (True, *'tq'))
+    conf = common.init(*'ten')
     
     context = Context()
     sprops = SessionProperties(HOST=conf.host, VPN_NAME=conf.user.vpn, USERNAME=conf.user.name, GENERATE_SEQUENCE_NUMBER="1")
     
-    def rxMsgCallback(session_p, msg_p, user_p):
-        return CALLBACK_OK
-    
     funcInfo = SessionFuncInfo()
-    funcInfo.setMsgCallback(rxMsgCallback)
+    funcInfo.setMsgCallback(_defaultMsgCallback)
     funcInfo.setEventCallback(eventCallback)
     
     session = Session(context, sprops, funcInfo)
     session.connect()
-    
-    dest = None
-    if conf.topic:
-        print('Publish to topic {}.'.format(conf.topic))
-        dest = Destination(conf.topic)
-    elif conf.queue:
-        print('Publish to queue {}.'.format(conf.queue))
-        dest = Destination(conf.queue, Destination.QUEUE)
+
+    if conf.topic is None:
+        conf.topic = session.createTempTopic()
+    dest = Destination(conf.topic)
+    print('topic is {}'.format(conf.topic))
+
+    fprops = FlowProperties(BIND_BLOCKING=PROP_ENABLE_VAL, \
+                    BIND_ENTITY_ID=FlowProperties.BIND_ENTITY_TE, \
+                    ACKMODE=FlowProperties.ACKMODE_CLIENT, \
+                    TOPIC=conf.topic)
+    if conf.tpe is None:
+        fprops.BIND_ENTITY_DURABLE = PROP_DISABLE_VAL
     else:
-        raise RuntimeError('Invalid topic or queue')
-    
+        fprops.BIND_NAME = conf.tpe
+        fprops.BIND_ENTITY_DURABLE = PROP_ENABLE_VAL
+
+    print('Creating flow...')
+    def rxFlowMsgCallback(flow_p, msg_p, user_p):
+        Message.dumpPtr(msg_p)
+        Flow.ackPtr(flow_p, msg_p)
+        print()
+
+        return CALLBACK_OK
+
+    funcInfo = FlowFuncInfo()
+    funcInfo.setMsgCallback(rxFlowMsgCallback)
+    funcInfo.setEventCallback(eventCallback)
+    flow = Flow(session, fprops, funcInfo)
+
+    print('Publishing to {}'.format(conf.topic))
     atqueue = co.deque()
     while conf.num > 0:
         msg = Message()
@@ -123,6 +139,7 @@ def main_run():
         session.sendMsg(msg)
         conf.num -= 1
         print('Message sent, {} to go'.format(conf.num))
+        time.sleep(1)
     
     print('Waiting for acks')
     numAcked = 0
@@ -134,7 +151,13 @@ def main_run():
                 numAccepted += 1
             atqueue.pop()
     
-    time.sleep(0.1)
+    print('Waiting 2 secs before closing')
+    time.sleep(2)
+    del flow
+    if conf.tpe:
+        session.dteUnsubscribe(conf.tpe)
+        time.sleep(0.2)
+
     session.disconnect()
 
     print('{} acked, {} accepted'.format(numAcked, numAccepted))

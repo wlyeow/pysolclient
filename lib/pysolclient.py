@@ -42,10 +42,6 @@ if _library_name:
 else:
     raise ImportError('libsolclient not found')
 
-##############
-# functions
-##############
-
 # getLastErrorInfo()
 class ErrorInfo(Structure):
     STR_SIZE = 256
@@ -54,6 +50,13 @@ class ErrorInfo(Structure):
 getLastErrorInfo = _lib.solClient_getLastErrorInfo
 getLastErrorInfo.argtypes = []
 getLastErrorInfo.restype  = POINTER(ErrorInfo)
+
+class BufInfo:
+    MAX_CORRELATION_TAG_SIZE = 16
+    MAX_DURABLE_QUEUENAME_SIZE = 200
+    MAX_QUEUENAME_SIZE = 250
+    MAX_TOPIC_SIZE = 250
+    MAX_USER_DATA_SIZE = 36
 
 class SubscribeFlags:
     LOCAL_DISPATCH_ONLY = 0x08
@@ -121,6 +124,13 @@ class ReturnCode:
             raise SolaceError(rc, f.__name__)
 
         return cast(args[1]._obj, POINTER(c_char * args[2]._obj.value)).contents.raw
+
+    @staticmethod
+    def returnString(rc, f, args):
+        if rc != ReturnCode.OK:
+            raise SolaceError(rc, f.__name__)
+
+        return cast(args[1], POINTER(c_char * args[2])).contents.value.decode()
 
     @staticmethod
     def returnBool(rc, f, args):
@@ -606,11 +616,8 @@ class Context:
 
 MSG_CALLBACK_TYPE = CFUNCTYPE(c_int, c_void_p, c_void_p, c_void_p)
 
-def msgDumpToConsole(msg_p):
-    Message.dumpPtr(msg_p)
-
 def _defaultMsgCallback( session_p, msg_p, user_p ):
-    msgDumpToConsole(msg_p)
+    Message.dumpPtr(msg_p)
     return CALLBACK_OK
 
 class EventCallbackInfo(Structure):
@@ -717,7 +724,6 @@ class FlowFuncInfo(Structure):
         self.eventInfo.user_p = cast(user_p, c_void_p)
 
 class Flow:
-
     _create = _lib.solClient_session_createFlow
     _create.argtypes = [POINTER(c_char_p), c_void_p, c_void_p, POINTER(FlowFuncInfo), c_size_t]
     _create.restype  = c_int
@@ -807,9 +813,9 @@ class Session:
     _createTempTopic = _lib.solClient_session_createTemporaryTopicName
     _createTempTopic.argtypes = [c_void_p, c_char_p, c_size_t]
     _createTempTopic.restype  = c_int
-    _createTempTopic.errcheck = ReturnCode.returnRefCharArrayAsBytes
+    _createTempTopic.errcheck = ReturnCode.returnString
     def createTempTopic(self):
-        return
+        return self._createTempTopic(self._pt, create_string_buffer(BufInfo.MAX_TOPIC_SIZE), BufInfo.MAX_TOPIC_SIZE)
 
     _disconnect = _lib.solClient_session_disconnect
     _disconnect.argtypes = [c_void_p]
@@ -841,6 +847,13 @@ class Session:
 
     def topicSubscribeDispatch(self, topic, flags, dispatchFunc, user):
         pass
+
+    _dteUnsub = _lib.solClient_session_dteUnsubscribe
+    _dteUnsub.argtypes = [c_void_p, c_char_p, c_void_p]
+    _dteUnsub.restype  = c_int
+    _dteUnsub.errcheck = ReturnCode.raiseNotOK
+    def dteUnsubscribe(self, dte, tag=None):
+        return self._dteUnsub(self._pt, dte.encode(), None if tag is None else byref(tag))
 
     _epProvision = _lib.solClient_session_endpointProvision
     _epProvision.argtypes = [POINTER(c_char_p), c_void_p, c_int, c_void_p, c_char_p, c_size_t]
