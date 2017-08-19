@@ -21,7 +21,7 @@ def eventCallback(session_p, eventInfo_p, user_p):
         LOG.log(LOG.INFO, 'eventCallback - {}'.format(
                 SessionEvent.toString(event)))
 
-        acker = common.CallbackObject.deref(corr_p)
+        acker = common.cbObject.deref(corr_p)
         # remove circular ref
         del acker.msg
         acker.accepted = True
@@ -37,7 +37,7 @@ def eventCallback(session_p, eventInfo_p, user_p):
                     info_p.contents.responseCode,
                     info_p.contents.errorStr.decode()) )
 
-        acker = common.CallbackObject.deref(corr_p)
+        acker = common.cbObject.deref(corr_p)
         print('Rejected Seq {}'.format(acker.msg.getSeqNum()))
         # remove circular ref
         del acker.msg
@@ -45,8 +45,14 @@ def eventCallback(session_p, eventInfo_p, user_p):
         acker.acked = True
         return
 
+    if event == SessionEvent.TE_UNSUBSCRIBE_OK:
+        LOG.log(LOG.INFO, 'eventCallback - {}\n'.format(
+                SessionEvent.toString(event)))
+        if corr_p is not None:
+            print('Unsubscribed from {}.'.format(common.cbString.deref(corr_p).decode()))
+        return
+
     if event == SessionEvent.UP_NOTICE or \
-        event == SessionEvent.TE_UNSUBSCRIBE_OK or \
         event == SessionEvent.CAN_SEND or \
         event == SessionEvent.RECONNECTING_NOTICE or \
         event == SessionEvent.RECONNECTED_NOTICE or \
@@ -129,7 +135,7 @@ def main_run():
                 Dest=dest,
                 BinaryAttachment='Hello World!\n'.encode(),
                 Delivery=Message.DELIVERY_MODE_PERSISTENT,
-                CorrTag=common.CallbackObject.wrap(at))
+                CorrTag=common.cbObject.wrap(at))
 
         if err:
             for n, e in err.items():
@@ -151,12 +157,11 @@ def main_run():
                 numAccepted += 1
             atqueue.pop()
     
-    print('Waiting 2 secs before closing')
-    time.sleep(2)
     del flow
     if conf.tpe:
-        session.dteUnsubscribe(conf.tpe)
-        time.sleep(0.2)
+        name = common.cbString.wrap(conf.tpe.encode())
+        session.dteUnsubscribe(conf.tpe, byref(name))
+        time.sleep(1)
 
     session.disconnect()
 

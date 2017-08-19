@@ -852,14 +852,14 @@ class Session:
     _dteUnsub.argtypes = [c_void_p, c_char_p, c_void_p]
     _dteUnsub.restype  = c_int
     _dteUnsub.errcheck = ReturnCode.raiseNotOK
-    def dteUnsubscribe(self, dte, tag=None):
-        return self._dteUnsub(self._pt, dte.encode(), None if tag is None else byref(tag))
+    def dteUnsubscribe(self, dte, corrTag=None):
+        return self._dteUnsub(self._pt, dte.encode(), corrTag)
 
     _epProvision = _lib.solClient_session_endpointProvision
     _epProvision.argtypes = [POINTER(c_char_p), c_void_p, c_int, c_void_p, c_char_p, c_size_t]
     _epProvision.restype  = c_int
     _epProvision.errcheck = ReturnCode.raiseExcept((ReturnCode.OK, ReturnCode.IN_PROGRESS, ReturnCode.WOULD_BLOCK))
-    def epProvision(self, epprops, flags = ProvisionFlags.WAITFORCONFIRM, corrTag = None):
+    def epProvision(self, epprops, flags=ProvisionFlags.WAITFORCONFIRM, corrTag=None):
         return self._epProvision(epprops.toCPropsArray(), self._pt, flags, corrTag, None, 0)
 
     _destroy = _lib.solClient_session_destroy
@@ -953,6 +953,9 @@ class Message:
     def setCorrTag(self, tag):
         self.corrTag = tag
         self._setCorrTagPtr(self._pt, byref(self.corrTag), sizeof(self.corrTag))
+
+    def setCorrTagPtr(self, tag, size):
+        self._setCorrTagPtr(self._pt, tag, size)
 
     _setDTO = _lib.solClient_msg_setDeliverToOne
     _setDTO.argtypes = [c_void_p, c_ubyte]

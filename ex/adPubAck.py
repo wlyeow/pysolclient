@@ -20,7 +20,7 @@ def eventCallback(session_p, eventInfo_p, user_p):
         LOG.log(LOG.INFO, 'eventCallback - {}'.format(
                 SessionEvent.toString(event)))
 
-        acker = common.CallbackObject.deref(corr_p)
+        acker = common.cbObject.deref(corr_p)
         print('Acknowledged Seq {}'.format(acker.msg.getSeqNum()))
         # remove circular ref
         del acker.msg
@@ -37,7 +37,7 @@ def eventCallback(session_p, eventInfo_p, user_p):
                     info_p.contents.responseCode,
                     info_p.contents.errorStr.decode()) )
 
-        acker = common.CallbackObject.deref(corr_p)
+        acker = common.cbObject.deref(corr_p)
         print('Rejected Seq {}'.format(acker.msg.getSeqNum()))
         # remove circular ref
         del acker.msg
@@ -113,7 +113,7 @@ def main_run():
                 Dest=dest,
                 BinaryAttachment='Hello World!\n'.encode(),
                 Delivery=Message.DELIVERY_MODE_PERSISTENT,
-                CorrTag=common.CallbackObject.wrap(at))
+                CorrTag=common.cbObject.wrap(at))
 
         if err:
             for n, e in err.items():

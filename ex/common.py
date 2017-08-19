@@ -81,16 +81,30 @@ def init(*opts):
 
     return args
 
-class CallbackObject:
+class CType:
     @classmethod
-    def wrap(cls, o):
-        return py_object(o)
+    def wrapObj(cls, o, t=py_object):
+        return t(o)
 
     @classmethod
-    def deref(cls, o):
-        return cast(o, POINTER(py_object)).contents.value
+    def derefObj(cls, o, t=py_object):
+        return cast(o, POINTER(t)).contents.value
+
+    def __init__(self, t):
+        if callable(t) and type(t).__module__ == '_ctypes':
+            self.ctype = t
+        else:
+            raise TypeError('not a ctype callable')
+
+    def wrap(self, o):
+        return self.wrapObj(o, self.ctype)
+
+    def deref(self, o):
+        return self.derefObj(o, self.ctype)
+
+cbObject = CType(py_object)
+cbString = CType(c_char_p)
 
 if __name__ == "__main__":
     args = init('tqe')
     print(args)
-
